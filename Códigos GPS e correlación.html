@@ -1,0 +1,2302 @@
+<!doctype html>
+<html lang="gl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Códigos GPS, Correlación e Posicionamento 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..800&family=JetBrains+Mono:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<script>
+window.MathJax = { tex: { inlineMath: [['\\(', '\\)']] }, svg: { fontCache: 'global' } };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js" async></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --bg-subtle: #eaf0f7;
+  --surface: #ffffff;
+  --surface-elev: rgba(255, 255, 255, 0.86);
+  --ink: #0f1d2b;
+  --ink-soft: #2c3e50;
+  --muted: #5a6b7d;
+  --rule: #d5dfe9;
+  --grid: #e8eef5;
+  --accent: #185adb;
+  --accent-soft: rgba(24, 90, 219, 0.10);
+  --warm: #e04f16;
+  --warm-soft: rgba(224, 79, 22, 0.11);
+  --pos: rgba(12, 158, 118, 0.30);
+  --neg: rgba(208, 38, 98, 0.26);
+  --s1: #185adb;
+  --s2: #e04f16;
+  --s3: #1b994b;
+  --s4: #8e3ccb;
+  --chip: #edf2f8;
+  --shadow-sm: 0 2px 8px rgba(15, 29, 43, 0.04), 0 1px 2px rgba(15, 29, 43, 0.06);
+  --shadow-md: 0 12px 32px -8px rgba(15, 29, 43, 0.08), 0 4px 12px -2px rgba(15, 29, 43, 0.04);
+  --f-display: "Archivo", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --f-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0b1017;
+    --bg-subtle: #111923;
+    --surface: #141e2a;
+    --surface-elev: rgba(20, 30, 42, 0.85);
+    --ink: #eaf1f8;
+    --ink-soft: #c3d1e0;
+    --muted: #8b9db1;
+    --rule: #253445;
+    --grid: #1b2735;
+    --accent: #5fa0ff;
+    --accent-soft: rgba(95, 160, 255, 0.14);
+    --warm: #ff854d;
+    --warm-soft: rgba(255, 133, 77, 0.14);
+    --pos: rgba(52, 211, 153, 0.28);
+    --neg: rgba(251, 113, 133, 0.26);
+    --s1: #5fa0ff;
+    --s2: #ff854d;
+    --s3: #4ade80;
+    --s4: #c084fc;
+    --chip: #1c2938;
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+    --shadow-md: 0 14px 36px -8px rgba(0, 0, 0, 0.45);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b1017;
+  --bg-subtle: #111923;
+  --surface: #141e2a;
+  --surface-elev: rgba(20, 30, 42, 0.85);
+  --ink: #eaf1f8;
+  --ink-soft: #c3d1e0;
+  --muted: #8b9db1;
+  --rule: #253445;
+  --grid: #1b2735;
+  --accent: #5fa0ff;
+  --accent-soft: rgba(95, 160, 255, 0.14);
+  --warm: #ff854d;
+  --warm-soft: rgba(255, 133, 77, 0.14);
+  --pos: rgba(52, 211, 153, 0.28);
+  --neg: rgba(251, 113, 133, 0.26);
+  --s1: #5fa0ff;
+  --s2: #ff854d;
+  --s3: #4ade80;
+  --s4: #c084fc;
+  --chip: #1c2938;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 14px 36px -8px rgba(0, 0, 0, 0.45);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image:
+    radial-gradient(circle at 15% 0%, var(--accent-soft), transparent 40%),
+    radial-gradient(circle at 85% 10%, var(--warm-soft), transparent 35%);
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 18px;
+  line-height: 1.68;
+  padding-bottom: 80px;
+}
+
+img { max-width: 100%; }
+[hidden]:not([hidden=until-found i]) { display: none !important; }
+
+/* Barra superior flotante */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background: var(--surface-elev);
+  border-bottom: 1px solid var(--rule);
+  padding: 10px max(20px, env(safe-area-inset-left, 0px));
+}
+.topbar-inner {
+  max-width: 1140px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.nav-links::-webkit-scrollbar { display: none; }
+.nav-links a {
+  font-family: var(--f-display);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 6px 11px;
+  border-radius: 999px;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+.nav-links a:hover {
+  color: var(--ink);
+  background: var(--chip);
+}
+.nav-links a span {
+  font-family: var(--f-mono);
+  font-size: 0.72rem;
+  color: var(--accent);
+  margin-right: 4px;
+}
+.theme-btn {
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--f-display);
+  font-size: 0.8rem;
+  font-weight: 650;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.theme-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.wrap {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding-inline: max(20px, env(safe-area-inset-left, 0px));
+}
+.prose { max-width: 740px; }
+
+h1, h2, h3, h4 {
+  font-family: var(--f-display);
+  text-wrap: balance;
+  line-height: 1.14;
+  margin: 0;
+  color: var(--ink);
+}
+h1 {
+  font-size: clamp(2.25rem, 5vw, 3.8rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+h1 .hl {
+  background: linear-gradient(125deg, var(--accent), var(--warm));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+h2 {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+h3 {
+  font-size: 1.16rem;
+  font-weight: 700;
+}
+p { margin: 0; color: var(--ink-soft); }
+p strong { color: var(--ink); }
+.eyebrow {
+  font-family: var(--f-display);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+a { color: var(--accent); text-underline-offset: 3px; }
+
+/* Hero */
+header.hero {
+  padding-block: 56px 44px;
+  display: grid;
+  gap: 22px;
+  border-bottom: 1px solid var(--rule);
+  position: relative;
+}
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: end;
+}
+.lede {
+  font-size: 1.24rem;
+  line-height: 1.6;
+  max-width: 720px;
+  color: var(--ink-soft);
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+.fact-card {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 2px;
+}
+.fact-card .k {
+  font-family: var(--f-display);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 650;
+}
+.fact-card .v {
+  font-family: var(--f-mono);
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.fact-card .sub {
+  font-family: var(--f-mono);
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+/* Seccións */
+section {
+  padding-block: 64px 12px;
+  display: grid;
+  gap: 24px;
+}
+.sec-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  align-items: baseline;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--grid);
+}
+.sec-num {
+  font-family: var(--f-mono);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 4px 10px;
+  border-radius: 999px;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+.sec-head .eyebrow { grid-column: 2; }
+.sec-head h2 { grid-column: 2; }
+
+.prose p + p { margin-top: 14px; }
+.math {
+  overflow-x: auto;
+  padding: 14px 18px;
+  margin: 8px 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+ul.props {
+  margin: 8px 0 0;
+  padding-left: 1.25em;
+  display: grid;
+  gap: 10px;
+  color: var(--ink-soft);
+}
+ul.props li::marker { color: var(--accent); }
+
+/* Paneis interactivos */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 22px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  box-shadow: var(--shadow-md);
+}
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--grid);
+}
+.panel h3 {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.panel h3 small {
+  font-family: var(--f-body);
+  font-weight: 400;
+  font-size: 0.92rem;
+  color: var(--muted);
+  font-stretch: 100%;
+}
+canvas {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 8px;
+}
+.cv-box {
+  background: var(--bg-subtle);
+  border: 1px solid var(--grid);
+  border-radius: 10px;
+  padding: 12px;
+  min-width: 0;
+}
+.cv-label {
+  font-family: var(--f-display);
+  font-size: 0.76rem;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.key i {
+  width: 18px;
+  height: 3.5px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.key i.area { height: 11px; width: 14px; border-radius: 3px; }
+
+/* Controis */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  align-items: end;
+  font-family: var(--f-display);
+  font-size: 0.92rem;
+  background: var(--bg-subtle);
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--grid);
+}
+.ctl { display: grid; gap: 5px; min-width: 0; }
+.ctl label, .ctl .lab {
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+.ctl.grow { flex: 1 1 240px; }
+input[type=range] {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.ctl .val {
+  font-family: var(--f-mono);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+select, input[type=number] {
+  font-family: var(--f-mono);
+  font-size: 0.88rem;
+  padding: 7px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  transition: border-color 0.15s;
+}
+select:hover, input[type=number]:hover { border-color: var(--accent); }
+input[type=number] { width: 88px; }
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.seg button {
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--f-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button:hover { background: var(--chip); color: var(--ink); }
+.seg button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.btn {
+  font-family: var(--f-display);
+  font-weight: 650;
+  font-size: 0.88rem;
+  padding: 9px 15px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn.ghost {
+  background: var(--surface);
+  color: var(--accent);
+  border-color: var(--rule);
+}
+.btn.ghost:hover { border-color: var(--accent); background: var(--accent-soft); }
+.btn.warm { background: var(--warm); border-color: var(--warm); }
+.btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+button:focus-visible, select:focus-visible, input:focus-visible {
+  outline: 2px solid var(--warm);
+  outline-offset: 2px;
+}
+
+/* Readouts */
+.readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  font-family: var(--f-mono);
+  font-size: 0.92rem;
+  align-items: center;
+}
+.readout > div {
+  background: var(--bg-subtle);
+  border: 1px solid var(--grid);
+  padding: 8px 14px;
+  border-radius: 9px;
+}
+.readout .big { font-size: 1.38rem; font-weight: 700; color: var(--ink); }
+.readout span.k {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: block;
+  font-family: var(--f-display);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.note { font-size: 0.94rem; color: var(--muted); }
+.callout {
+  background: var(--warm-soft);
+  border-left: 4px solid var(--warm);
+  padding: 12px 16px;
+  border-radius: 0 10px 10px 0;
+  font-size: 0.98rem;
+  color: var(--ink);
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: 16px;
+}
+
+/* Táboa de satélites */
+.sats { overflow-x: auto; }
+.sats table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--f-display);
+  font-size: 0.92rem;
+  min-width: 540px;
+}
+.sats th {
+  text-align: left;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--rule);
+}
+.sats td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--grid);
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+.sats tr:hover td { background: var(--bg-subtle); }
+.sats td.dist { font-family: var(--f-mono); font-size: 0.86rem; color: var(--muted); }
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.amp { display: flex; gap: 10px; align-items: center; }
+.amp input { width: 110px; }
+.hidden-sol .sol { filter: blur(6px); pointer-events: none; user-select: none; }
+.status {
+  font-family: var(--f-display);
+  font-weight: 650;
+  padding: 10px 14px;
+  border-radius: 9px;
+  background: var(--chip);
+  font-size: 0.94rem;
+  border: 1px solid var(--rule);
+}
+.status.ok {
+  color: var(--s3);
+  border-color: var(--s3);
+  background: rgba(27, 153, 75, 0.08);
+}
+.status.no { color: var(--muted); }
+.check {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-family: var(--f-display);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.check input { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+
+/* Sección 5: Tarxetas pedagóxicas dos 4 satélites e visor 3D */
+.steps-4 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+  margin-block: 8px;
+}
+.step-card {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+.step-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+}
+.step-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: var(--accent);
+}
+.step-card.s-1::before { background: var(--s1); }
+.step-card.s-2::before { background: var(--s2); }
+.step-card.s-3::before { background: var(--s3); }
+.step-card.s-4::before { background: var(--s4); }
+
+.step-badge {
+  font-family: var(--f-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.step-card h4 {
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+.step-card p {
+  font-size: 0.92rem;
+  line-height: 1.52;
+  color: var(--muted);
+}
+.step-card .geom-tag {
+  margin-top: 4px;
+  font-family: var(--f-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  color: var(--ink);
+  width: fit-content;
+}
+
+.clock-explainer {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 16px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+}
+.clock-scale {
+  display: grid;
+  gap: 10px;
+  align-content: center;
+  background: var(--bg-subtle);
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid var(--grid);
+}
+.clock-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--f-mono);
+  font-size: 0.86rem;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--rule);
+}
+.clock-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.clock-row .err-t { color: var(--accent); font-weight: 700; }
+.clock-row .err-d { color: var(--warm); font-weight: 700; }
+
+.layout-3d {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+@media (max-width: 900px) {
+  .layout-3d { grid-template-columns: 1fr; }
+}
+.canvas-3d-wrap {
+  position: relative;
+  background: radial-gradient(circle at 50% 45%, #112239 0%, #070d17 100%);
+  border-radius: 12px;
+  border: 1px solid var(--rule);
+  overflow: hidden;
+  min-height: 520px;
+  display: block;
+}
+.canvas-3d-overlay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.hud-pill {
+  pointer-events: auto;
+  background: rgba(12, 20, 31, 0.76);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e6eef8;
+  font-family: var(--f-mono);
+  font-size: 0.75rem;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+.hud-hint {
+  position: absolute;
+  bottom: 10px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+  font-family: var(--f-display);
+  font-size: 0.76rem;
+  color: rgba(226, 236, 248, 0.72);
+}
+
+footer {
+  margin-top: 72px;
+  padding-top: 28px;
+  border-top: 1px solid var(--rule);
+  font-size: 0.9rem;
+  color: var(--muted);
+  display: grid;
+  gap: 16px;
+}
+.footer-authors {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  font-family: var(--f-display);
+}
+.footer-authors .names {
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: var(--ink);
+}
+.footer-authors .univ {
+  font-weight: 650;
+  font-size: 0.88rem;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+@media (max-width: 640px) {
+  body { font-size: 17px; }
+  .panel { padding: 16px; }
+  .nav-links { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto !important; }
+}
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Navegación principal">
+  <div class="topbar-inner">
+    <a href="#" class="brand"><span class="brand-dot"></span>Sistemas de Telecomunicación Aeroespaciais · UVigo</a>
+    <div class="nav-links">
+      <a href="#problema"><span>01</span>Sinal mesturado</a>
+      <a href="#escalar"><span>02</span>Ortogonalidade</a>
+      <a href="#codigos"><span>03</span>Códigos Gold</a>
+      <a href="#receptor"><span>04</span>Receptor CDMA</a>
+      <a href="#posicion"><span>05</span>3D e 4 Satélites</a>
+    </div>
+    <button class="theme-btn" id="btnTheme" type="button" aria-label="Cambiar tema claro/escuro">
+      <span id="themeIcon">◐</span> <span id="themeTxt">Tema</span>
+    </button>
+  </div>
+</nav>
+
+<div class="wrap">
+<header class="hero">
+  <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center">
+    <span class="eyebrow">Sistemas de Telecomunicación Aeroespaciais · Mestrado en Enxeñería Aeronáutica</span>
+    <span style="font-family:var(--f-mono);font-size:0.76rem;color:var(--muted);background:var(--chip);padding:3px 10px;border-radius:999px;border:1px solid var(--rule)">Universidade de Vigo</span>
+  </div>
+  <h1>Como distingue o GPS <span class="hl">cada satélite</span> e calcula a túa posición 3D?</h1>
+  <p class="lede">Todos os satélites GPS emiten na mesma frecuencia portadora (\(1575{,}42\ \text{MHz}\)) e ao mesmo tempo. A antena do teu receptor recibe unha única mestura ruidosa e, aínda así, separa cada satélite mediante o <strong>produto escalar</strong>, mide os seus tempos de voo e resolve en <strong>3D</strong> a túa posición exacta xunto coa deriva do teu reloxo grazas a un <strong>cuarto satélite</strong>.</p>
+  <div class="facts">
+    <div class="fact-card">
+      <span class="k">Lonxitude do código C/A</span>
+      <span class="v">1023 chips</span>
+      <span class="sub">Secuencia Gold pseudoaleatoria</span>
+    </div>
+    <div class="fact-card">
+      <span class="k">Taxa de transmisión</span>
+      <span class="v">1,023 Mchip/s</span>
+      <span class="sub">1 período completo = 1 ms</span>
+    </div>
+    <div class="fact-card">
+      <span class="k">Resolución por chip</span>
+      <span class="v">≈ 977,5 ns</span>
+      <span class="sub">Equivale a ≈ 293 m á luz</span>
+    </div>
+    <div class="fact-card">
+      <span class="k">Constelación e incógnitas</span>
+      <span class="v">Mín. 4 satélites</span>
+      <span class="sub">Coordenadas (x, y, z) + reloxo δt</span>
+    </div>
+  </div>
+</header>
+
+<!-- 1 -->
+<section id="problema">
+  <div class="sec-head">
+    <span class="sec-num">01</span>
+    <span class="eyebrow">O problema físico</span>
+    <h2>Unha soa antena, moitos sinais mesturados</h2>
+  </div>
+  <div class="prose">
+    <p>Cada satélite emite un código pseudoaleatorio propio \(f_i(t)\) composto por pulsos rectangulares chamados <em>chips</em> (\(+1\) ou \(-1\)). Ao receptor chégalle simultaneamente a suma de todos os satélites visibles, cada un desprazado no tempo polo seu atraso de propagación \(\tau_i = d_i/c\):</p>
+    <div class="math">$$s_{\mathrm{recibida}}(t)=A_1 f_1(t-\tau_1)+A_2 f_2(t-\tau_2)+A_3 f_3(t-\tau_3)+A_4 f_4(t-\tau_4)+\cdots+\text{ruído térmico}$$</div>
+    <p>Na gráfica inferior móstranse os códigos individuais dos 4 satélites activos do escenario (primeiros 60 chips) e, na última pista, o sinal composto que realmente chega á antena. A simple vista é ruído irrecoñecible.</p>
+  </div>
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Superposición no aire <small>primeiros 60 chips de cada satélite e suma recibida</small></h3>
+      <span class="note">Sincronizado co escenario da sección 04</span>
+    </div>
+    <div class="cv-box">
+      <canvas id="cvStack" aria-label="Códigos individuais e sinal recibido"></canvas>
+    </div>
+    <p class="note">Modifica os satélites activos, os seus atrasos ou o nivel de ruído na sección 04 para observar como cambia a mestura recibida.</p>
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="escalar">
+  <div class="sec-head">
+    <span class="sec-num">02</span>
+    <span class="eyebrow">A ferramenta matemática</span>
+    <h2>Produto escalar e ortogonalidade</h2>
+  </div>
+  <div class="prose">
+    <p>Para dúas funcións reais definidas nun intervalo, o <strong>produto escalar</strong> defínese como a integral do seu produto punto a punto:</p>
+    <div class="math">$$\langle f,g\rangle=\int_0^{2\pi} f(t)\,g(t)\,dt$$</div>
+    <p>Xeometricamente representa a área neta con signo baixo a curva produto \(f(t)\cdot g(t)\): a rexión verde (\(+ \)) suma e a rexión vermella (\(- \)) resta. Cando dúas funcións son <em>ortogonais</em>, os lóbulos positivos e negativos compénsanse exactamente e \(\langle f,g\rangle = 0\). Esta é a base das series de Fourier e do acceso múltiple por división de código (CDMA):</p>
+    <div class="math">$$\langle \sin mt,\ \sin nt\rangle=\begin{cases}\pi & \text{se } m=n\\[2pt] 0 & \text{se } m\neq n\end{cases}\qquad \langle \sin mt,\ \cos nt\rangle = 0$$</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Laboratorio de ortogonalidade <small>compara harmónicos trigonométricos</small></h3>
+    </div>
+    <div class="controls">
+      <div class="ctl"><span class="lab">f(t) = sin(m·t), frecuencia m</span><div class="seg" id="segM"></div></div>
+      <div class="ctl"><span class="lab">Función g(t)</span><div class="seg" id="segG"><button data-v="sin" aria-pressed="true">sin</button><button data-v="cos" aria-pressed="false">cos</button></div></div>
+      <div class="ctl"><span class="lab">Frecuencia n</span><div class="seg" id="segN"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="cv-box">
+        <div class="cv-label"><span class="key"><i style="background:var(--accent)"></i><span id="lblF">f(t)</span></span><span class="key"><i style="background:var(--warm)"></i><span id="lblG">g(t)</span></span></div>
+        <canvas id="cvOrtA"></canvas>
+      </div>
+      <div class="cv-box">
+        <div class="cv-label"><span class="key"><i class="area" style="background:var(--pos)"></i>área positiva (+)</span><span class="key"><i class="area" style="background:var(--neg)"></i>área negativa (−)</span></div>
+        <canvas id="cvOrtB"></canvas>
+      </div>
+    </div>
+    <div class="readout">
+      <div><span class="k">Produto escalar ⟨f, g⟩</span><span class="big" id="roOrt">0</span></div>
+      <div class="note" id="roOrtTxt" style="background:transparent;border:0;padding:0"></div>
+    </div>
+  </div>
+
+  <div class="prose">
+    <h3 style="margin-bottom:8px">Medir un atraso descoñecido cunha onda sinusoidal</h3>
+    <p>Supoñamos que o satélite emite \(f(t)=\sin t\) e o receptor capta \(g(t)=\sin(t-\tau)\), sen coñecer o atraso \(\tau\). O receptor xera internamente unha réplica desprazada \(f(t-\hat\tau)\) e calcula a correlación (o produto escalar) para cada atraso candidato \(\hat\tau\):</p>
+    <div class="math">$$C(\hat\tau)=\int_0^{2\pi}\sin(t-\hat\tau)\,\sin(t-\tau)\,dt=\pi\cos(\hat\tau-\tau)$$</div>
+    <p>A correlación alcanza o seu máximo (\(\pi\)) xusto cando \(\hat\tau=\tau\), momento no que as dúas ondas quedan en fase e o seu produto é positivo en todo o intervalo.</p>
+  </div>
+  <div class="panel">
+    <div class="controls">
+      <div class="ctl grow"><label for="rgTau">Atraso real τ do satélite (incógnita)</label><input type="range" id="rgTau" min="0" max="6.283" step="0.01" value="1.9"><span class="val" id="vTau"></span></div>
+      <div class="ctl grow"><label for="rgTh">Desprazamento de proba τ̂ no receptor</label><input type="range" id="rgTh" min="0" max="12.566" step="0.01" value="0.3"><span class="val" id="vTh"></span></div>
+      <button class="btn" id="btnSweepSin" type="button">Varrer τ̂</button>
+    </div>
+    <div class="grid2">
+      <div class="cv-box">
+        <div class="cv-label"><span class="key"><i style="background:var(--accent)"></i>recibido sin(t−τ)</span><span class="key"><i style="background:var(--warm)"></i>réplica local sin(t−τ̂)</span></div>
+        <canvas id="cvSinA"></canvas>
+        <div class="cv-label" style="margin-top:8px"><span class="key"><i class="area" style="background:var(--pos)"></i><i class="area" style="background:var(--neg)"></i>produto instantáneo</span></div>
+        <canvas id="cvSinB"></canvas>
+      </div>
+      <div class="cv-box">
+        <div class="cv-label"><span class="key"><i style="background:var(--ink)"></i>Curva de correlación C(τ̂) = π cos(τ̂ − τ)</span><span class="key"><i style="background:var(--warm)"></i>τ̂ actual</span></div>
+        <canvas id="cvSinC"></canvas>
+        <div class="readout" style="margin-top:10px">
+          <div><span class="k">Correlación C(τ̂)</span><span class="big" id="roSin">0</span></div>
+          <div><span class="k">Máximo teórico</span><span class="big">π ≈ 3,142</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="callout"><strong>Por que non abonda cun seno puro?</strong> Un seno ten dous graves inconvenientes: 1) é unha curva suave cun pico ancho (pouca precisión temporal) que se repite cada \(2\pi\), creando múltiples máximos ambiguos; 2) se varios satélites emitisen senos na mesma frecuencia, sumaríanse nun único seno e sería imposible separalos.</p>
+  </div>
+</section>
+
+<!-- 3 -->
+<section id="codigos">
+  <div class="sec-head">
+    <span class="sec-num">03</span>
+    <span class="eyebrow">A solución CDMA</span>
+    <h2>Códigos pseudoaleatorios (familias de Gold)</h2>
+  </div>
+  <div class="prose">
+    <p>O sistema GPS substitúe o seno por secuencias binarias pseudoaleatorias de \(N = 1023\) <em>chips</em> con valores \(\pm 1\). Cada satélite identifícase polo seu número <strong>PRN</strong> (<em>Pseudo-Random Noise</em>, do 1 ao 32) e xera o seu código C/A combinando dous rexistros de desprazamento lineais de 10 bits (LFSR <strong>G1</strong> e <strong>G2</strong>). Para dous códigos \(c_i\) e \(c_j\), a correlación periódica para un desprazamento de \(k\) chips é:</p>
+    <div class="math">$$R_{ij}(k)=\sum_{n=0}^{1022} c_i[n]\;c_j[(n-k)\bmod 1023]$$</div>
+    <ul class="props">
+      <li><strong>Autocorrelación tipo delta (pico agudo único):</strong> Un código multiplicado por si mesmo sen desfasamento dá \(R_{ii}(0)=1023\). En canto se desalinia un só chip (\(k \neq 0\)), a correlación cae bruscamente e só pode tomar tres valores: \(\{-65, -1, +63\}\).</li>
+      <li><strong>Correlación cruzada cuase-ortogonal:</strong> Dous códigos de satélites distintos (\(i \neq j\)) manteñen \(|R_{ij}(k)| \le 65\) para <em>calquera</em> desprazamento \(k\) (menos do \(6{,}4\,\%\) do pico principal). Non interferen entre si.</li>
+    </ul>
+  </div>
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Explorador de códigos Gold reais (IS-GPS-200) <small>compara calquera parella de satélites</small></h3>
+    </div>
+    <div class="controls">
+      <div class="ctl"><label for="selA">Código Satélite A</label><select id="selA"></select></div>
+      <div class="ctl"><label for="selB">Código Satélite B</label><select id="selB"></select></div>
+      <label class="check"><input type="checkbox" id="chkZoom"> Ampliar o fondo de ruído (\(\pm 90\))</label>
+    </div>
+    <div class="cv-box">
+      <div class="cv-label">Primeiros 64 chips das secuencias C/A (\(+1\) / \(-1\))</div>
+      <canvas id="cvChips"></canvas>
+    </div>
+    <div class="grid2">
+      <div class="cv-box">
+        <div class="cv-label"><span class="key"><i style="background:var(--accent)"></i>Autocorrelación R<sub>AA</sub>(k)</span></div>
+        <canvas id="cvAuto"></canvas>
+        <div class="readout" style="margin-top:8px">
+          <div><span class="k">Pico en k = 0</span><span id="roAutoPk" style="font-weight:700">1023</span></div>
+          <div><span class="k">Lóbulos laterais (k ≠ 0)</span><span id="roAutoVals"></span></div>
+        </div>
+      </div>
+      <div class="cv-box">
+        <div class="cv-label"><span class="key"><i style="background:var(--warm)"></i>Correlación cruzada R<sub>AB</sub>(k)</span></div>
+        <canvas id="cvCross"></canvas>
+        <div class="readout" style="margin-top:8px">
+          <div><span class="k">Máximo |R<sub>AB</sub>|</span><span id="roCrossMax" style="font-weight:700"></span></div>
+          <div><span class="k">Valores discretos de Gold</span><span id="roCrossVals"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section id="receptor">
+  <div class="sec-head">
+    <span class="sec-num">04</span>
+    <span class="eyebrow">Simulador do correlador</span>
+    <h2>O receptor extrae cada satélite do ruído</h2>
+  </div>
+  <div class="prose">
+    <p>Á antena chega o sinal discreto \(s[n]=\sum_i A_i\,c_i[n-\tau_i]+\eta[n]\). Mesmo cando o ruído térmico \(\eta[n]\) ten unha amplitude maior cá dos propios satélites (como ocorre na realidade, onde o sinal GPS chega a \(-130\ \text{dBm}\), por debaixo do piso de ruído), ao correlacionar cos \(1023\) chips do código buscado \(c_p\):</p>
+    <div class="math">$$C(\hat\tau)=\frac{1}{1023}\sum_{n=0}^{1022} s[n]\;c_p[n-\hat\tau]\;\approx\;A_p\,\delta_{\hat\tau,\tau_p}+\text{ruído residual reducido en }\sqrt{1023}$$</div>
+    <p>Grazas á ganancia de procesado (\(10\log_{10}(1023)\approx 30\ \text{dB}\)), o pico emerxe claramente en \(\hat\tau=\tau_p\) cunha altura proporcional a \(A_p\).</p>
+  </div>
+
+  <div class="panel" id="scenario">
+    <div class="panel-head">
+      <h3>Escenario de satélites en órbita <small>configura os atrasos, amplitudes e ruído</small></h3>
+    </div>
+    <div class="sats">
+      <table>
+        <thead>
+          <tr><th>Activo</th><th>Satélite (PRN)</th><th>Atraso τ (chips)</th><th>Amplitude recibida A</th><th>Pseudodistancia (mód. 1 ms)</th></tr>
+        </thead>
+        <tbody id="satRows"></tbody>
+      </table>
+    </div>
+    <div class="controls">
+      <div class="ctl grow"><label for="rgNoise">Ruído térmico na antena σ</label><input type="range" id="rgNoise" min="0" max="8" step="0.1" value="1.5"><span class="val" id="vNoise"></span></div>
+      <button class="btn ghost" id="btnRandom" type="button">Novo escenario aleatorio</button>
+      <label class="check"><input type="checkbox" id="chkHide"> Modo reto: ocultar atrasos reais</label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Canle de correlación dun código <small>despraza a réplica local τ̂ para atopar o pico</small></h3>
+    </div>
+    <div class="controls">
+      <div class="ctl"><label for="selSearch">Código buscado (PRN)</label><select id="selSearch"></select></div>
+      <div class="ctl grow"><label for="rgK">Desprazamento de proba τ̂ (0 – 1022 chips)</label><input type="range" id="rgK" min="0" max="1022" step="1" value="0"><span class="val" id="vK"></span></div>
+      <button class="btn" id="btnSweep" type="button">Varrer todos os atrasos</button>
+      <button class="btn ghost" id="btnClear" type="button">Limpar</button>
+    </div>
+    <div class="grid2">
+      <div class="cv-box">
+        <div class="cv-label"><span class="key"><i style="background:var(--ink)"></i>recibido s[n]</span><span class="key"><i style="background:var(--warm)"></i>réplica c<sub>p</sub>[n−τ̂]</span><span style="text-transform:none;letter-spacing:0">(chips 0–119)</span></div>
+        <canvas id="cvRx"></canvas>
+        <div class="cv-label" style="margin-top:8px"><span class="key"><i class="area" style="background:var(--pos)"></i><i class="area" style="background:var(--neg)"></i>produto punto a punto s[n]·c<sub>p</sub>[n−τ̂]</span></div>
+        <canvas id="cvProd"></canvas>
+      </div>
+      <div class="cv-box">
+        <div class="cv-label"><span class="key"><i style="background:var(--accent)"></i>C(τ̂) nos atrasos probados</span><span class="key sol-key" id="keyTrue"><i style="background:var(--muted);height:8px;width:8px;border-radius:50%"></i>atrasos dos satélites</span></div>
+        <canvas id="cvCorr"></canvas>
+        <div class="readout" style="margin-top:10px">
+          <div><span class="k">C(τ̂) actual</span><span class="big" id="roC">0</span></div>
+          <div><span class="k">Máximo achado</span><span id="roBest" style="font-weight:600">—</span></div>
+        </div>
+        <div class="status no" id="roStatus" style="margin-top:10px">Move o control τ̂ ou preme «Varrer todos os atrasos».</div>
+        <div class="readout" style="margin-top:10px" id="roConv"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Adquisición paralela dos 32 PRN <small>varrido completo da constelación GPS</small></h3>
+      <span class="note">Fai clic en calquera barra para inspecionar ese satélite</span>
+    </div>
+    <div class="cv-box">
+      <canvas id="cvAcq" style="cursor:pointer"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section id="posicion">
+  <div class="sec-head">
+    <span class="sec-num">05</span>
+    <span class="eyebrow">Trilateración espacial 3D e sincronización</span>
+    <h2>Por que se necesitan 4 satélites? Xeometría 3D e o problema do reloxo</h2>
+  </div>
+
+  <div class="prose">
+    <p>Unha vez que o correlador identifica o pico de cada satélite e le a mensaxe de navegación (efemérides coa posición orbital \((x_i, y_i, z_i)\) e instante de emisión), converte cada tempo de voo nunha distancia multiplicando pola velocidade da luz \(c \approx 299\,792{,}458\ \text{km/s}\).</p>
+    <p>Estamos nun espazo de <strong>tres dimensións</strong> (latitude, lonxitude e altitude, ou coordenadas cartesianas xeocéntricas \(x, y, z\)). Entón, <strong>por que non abonda con 3 satélites e sempre necesitamos polo menos 4?</strong> Vexamos primeiro que ocorre xeometricamente ao engadir satélites un por un:</p>
+  </div>
+
+  <!-- Tarxetas paso a paso: 1, 2, 3 e 4 satélites -->
+  <div class="steps-4">
+    <div class="step-card s-1">
+      <span class="step-badge"><span class="dot" style="background:var(--s1)"></span>1 Satélite</span>
+      <h4>Unha esfera no espazo</h4>
+      <p>Se sabes que estás a unha distancia \(d_1\) do satélite \(S_1\), a túa posición pode ser calquera punto da superficie dunha esfera centrada en \(S_1\) de raio \(d_1\).</p>
+      <span class="geom-tag">Lugar xeométrico: Esfera 3D</span>
+    </div>
+    <div class="step-card s-2">
+      <span class="step-badge"><span class="dot" style="background:var(--s2)"></span>2 Satélites</span>
+      <h4>Unha circunferencia</h4>
+      <p>A esfera de \(S_1\) e a esfera de \(S_2\) córtanse no espazo formando unha circunferencia (o bordo dun disco perpendicular á liña que une ambos satélites).</p>
+      <span class="geom-tag">Intersección: Circunferencia</span>
+    </div>
+    <div class="step-card s-3">
+      <span class="step-badge"><span class="dot" style="background:var(--s3)"></span>3 Satélites (reloxo ideal)</span>
+      <h4>Dous puntos (1 na Terra)</h4>
+      <p>Unha terceira esfera corta a circunferencia en <strong>dous puntos</strong>: un adoita caer a miles de km no espazo e o outro sobre a Terra. <em>Se o teu reloxo fose atómico, 3 bastarían!</em></p>
+      <span class="geom-tag">Intersección: 2 Puntos → 1 válido</span>
+    </div>
+    <div class="step-card s-4">
+      <span class="step-badge"><span class="dot" style="background:var(--s4)"></span>4 Satélites (reloxo real)</span>
+      <h4>Posición 3D + Erro do reloxo</h4>
+      <p>Como o reloxo do receptor ten un erro descoñecido \(\delta t\), todas as esferas están «infladas» ou «desinfladas» en \(c\,\delta t\). O <strong>4.º satélite</strong> permite despexar \(\delta t\) e \((x,y,z)\).</p>
+      <span class="geom-tag">4 ecuacións → (x, y, z, δt)</span>
+    </div>
+  </div>
+
+  <!-- Explicación detallada do erro do reloxo e pseudodistancias -->
+  <div class="clock-explainer">
+    <div style="display:grid;gap:12px;align-content:start">
+      <h3>A clave física: Pseudodistancias e o reloxo de cuarzo</h3>
+      <p style="font-size:0.96rem">Cada satélite GPS leva a bordo <strong>reloxos atómicos</strong> de cesio ou rubidio (altísimo custo e peso) sincronizados co tempo GPS cunha precisión de poucos nanosegundos. Pero o teu teléfono móbil ou navegador ten un <strong>oscilador de cuarzo económico</strong> que sofre unha deriva descoñecida \(\delta t\) respecto ao tempo atómico.</p>
+      <p style="font-size:0.96rem">Cando o receptor calcula o atraso \(\tau_i\), resta a hora de emisión (atómica) da hora de chegada medida polo seu propio reloxo (con erro \(\delta t\)). Por iso non mide a distancia xeométrica verdadeira \(d_i\), senón unha <strong>pseudodistancia</strong> \(\rho_i\) que inclúe un nesgo común \(b = c\,\delta t\) igual para todos os satélites:</p>
+      <div class="math" style="margin:2px 0;font-size:0.92rem">$$\rho_i = \underbrace{\sqrt{(x-x_i)^2+(y-y_i)^2+(z-z_i)^2}}_{d_i\text{ (distancia real en 3D)}} + \underbrace{c\,\delta t}_{\text{erro de reloxo } b}\qquad (i=1,2,3,4)$$</div>
+      <p style="font-size:0.94rem;color:var(--muted)">Con só 3 satélites temos <strong>3 ecuacións e 4 incógnitas</strong> \((x, y, z, \delta t)\): calquera erro \(\delta t\) produciría unha intersección falsa sen darnos conta. Co <strong>4.º satélite</strong>, as 4 esferas só se cortan nun único punto cando o receptor axusta \(\delta t\) ao seu valor exacto.</p>
+    </div>
+    <div class="clock-scale">
+      <div style="font-family:var(--f-display);font-weight:700;font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Por que importa tanto \(\delta t\)? (\(c \approx 300\,000\ \text{km/s}\))</div>
+      <div class="clock-row"><span>Erro de reloxo \(\delta t = 1\ \text{s}\)</span><span class="err-d">± 300 000 km</span></div>
+      <div class="clock-row"><span>Erro de reloxo \(\delta t = 1\ \text{ms}\) (\(10^{-3}\text{ s}\))</span><span class="err-d">± 300 km</span></div>
+      <div class="clock-row"><span>Erro de reloxo \(\delta t = 1\ \mu\text{s}\) (\(10^{-6}\text{ s}\))</span><span class="err-d">± 300 m</span></div>
+      <div class="clock-row"><span>Erro de reloxo \(\delta t = 100\ \text{ns}\)</span><span class="err-d">± 30 m</span></div>
+      <div class="clock-row"><span>Erro de reloxo \(\delta t = 10\ \text{ns}\) (\(10^{-8}\text{ s}\))</span><span class="err-d">± 3 m</span></div>
+      <p class="note" style="font-size:0.84rem;margin-top:4px">Efecto colateral extraordinario: ao resolver o sistema de 4 satélites, o receptor GPS tamén corrixe \(\delta t\) e <strong>sincroniza o teu dispositivo co tempo atómico mundial</strong> cunha precisión de decenas de nanosegundos.</p>
+    </div>
+  </div>
+
+  <!-- Simulador 3D interactivo -->
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Simulador 3D da constelación GPS e trilateración <small>órbitas, esferas de distancia e efecto do erro de reloxo δt</small></h3>
+      <span class="note">Arrastra co rato ou co dedo sobre o globo 3D para rotar a cámara</span>
+    </div>
+
+    <div class="controls">
+      <div class="ctl">
+        <span class="lab">Modo de visualización 3D</span>
+        <div class="seg" id="seg3DMode">
+          <button data-v="4" aria-pressed="true">4 Satélites (Completo)</button>
+          <button data-v="1" aria-pressed="false">1 Sat</button>
+          <button data-v="2" aria-pressed="false">2 Sats</button>
+          <button data-v="3" aria-pressed="false">3 Sats</button>
+        </div>
+      </div>
+      <div class="ctl grow">
+        <label for="rgClockBias">Erro do reloxo do receptor δt (µs) → nesgo b = c·δt</label>
+        <input type="range" id="rgClockBias" min="-1500" max="1500" step="10" value="450">
+        <span class="val" id="vClockBias"></span>
+      </div>
+      <button class="btn" id="btnSolveClock" type="button">Sincronizar co 4.º satélite (δt → 0)</button>
+      <label class="check"><input type="checkbox" id="chkSpheres" checked> Mostrar esferas de trilateración</label>
+      <label class="check"><input type="checkbox" id="chkAutoRot" checked> Rotación orbital suave</label>
+    </div>
+
+    <div class="layout-3d">
+      <!-- Vista 3D Global -->
+      <div class="canvas-3d-wrap">
+        <div class="canvas-3d-overlay">
+          <div class="hud-pill" id="hud3DInfo">Órbita MEO · r = 26 560 km · Incl. 55°</div>
+          <div class="hud-pill" id="hudGDOP">GDOP: 2,1 (Boa xeometría 3D)</div>
+        </div>
+        <canvas id="cv3D" style="cursor:grab;display:block;width:100%"></canvas>
+        <div class="hud-hint">
+          <span>Arrastra para xirar en 3D · Roda/belisco para zoom</span>
+          <button class="btn ghost" id="btnResetCam" type="button" style="pointer-events:auto;padding:4px 10px;font-size:0.74rem;background:rgba(20,30,44,0.8);color:#fff;border-color:rgba(255,255,255,0.2)">Restablecer vista</button>
+        </div>
+      </div>
+
+      <!-- Zoom local de intersección das 4 esferas + táboa 3D -->
+      <div style="display:grid;gap:14px;align-content:start">
+        <div class="cv-box">
+          <div class="cv-label">
+            <span>Zoom local no receptor: Intersección das 4 fronteiras esféricas</span>
+          </div>
+          <canvas id="cvTrilatZoom"></canvas>
+          <p class="note" style="font-size:0.82rem;margin-top:6px">Se \(\delta t \neq 0\), os raios medidos \(\rho_i = d_i + c\delta t\) están alterados: 3 satélites darían unha <strong>posición falsa</strong> (punto oco), pero a 4.ª esfera non pasa por el! Só cando \(\delta t = 0\) concorren as 4 fronteiras no receptor real.</p>
+        </div>
+
+        <div class="readout">
+          <div><span class="k">Erro en posición (se usamos 3 sats)</span><span class="big" id="roPosErr" style="color:var(--warm)">0 km</span></div>
+          <div><span class="k">Residuo co 4.º satélite</span><span class="big" id="roRes4">0 km</span></div>
+        </div>
+
+        <div class="cv-box" style="padding:10px 12px">
+          <div class="cv-label" style="margin-bottom:4px">Coordenadas ECEF 3D (km) e pseudodistancias</div>
+          <div class="sats">
+            <table style="min-width:100%;font-size:0.8rem">
+              <thead>
+                <tr><th>Sat</th><th>Posición 3D (x, y, z)</th><th>Dist. real d<sub>i</sub></th><th>Medida ρ<sub>i</sub></th></tr>
+              </thead>
+              <tbody id="tb3DSats"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-authors">
+    <div>
+      <div class="names">Iván Area Carracedo · Enrique Aldao Pensado</div>
+      <div style="font-size:0.86rem;color:var(--muted);margin-top:2px">Sistemas de Telecomunicación Aeroespaciais · Mestrado en Enxeñería Aeronáutica</div>
+    </div>
+    <div class="univ">Universidade de Vigo</div>
+  </div>
+  <p><strong>Fontes e especificacións técnicas:</strong> <a href="http://tel.abloque.com/telecomunicaciones/tutorial/apartado31.html" target="_blank" rel="noopener">Tutorial de telecomunicacións (apartado 3.1)</a> e estándar oficial <em>IS-GPS-200</em>. Os códigos C/A xéranse cos polinomios LFSR \(G_1(x) = 1 + x^3 + x^{10}\) e \(G_2(x) = 1 + x^2 + x^3 + x^6 + x^8 + x^9 + x^{10}\) empregando as derivacións de fase reais de cada PRN (1–32).</p>
+  <p><strong>Nota sobre o modelo:</strong> Nos paneis de correlación (seccións 01–04) emprégase unha mostra por chip en banda base e correlación circular sobre un período de \(1\ \text{ms}\). Na sección 05 represéntase a constelación en coordenadas xeocéntricas 3D (ECEF) á escala orbital MEO (\(r \approx 4{,}17\,R_\oplus\)) xunto co efecto físico do nesgo de reloxo \(c\,\delta t\).</p>
+</footer>
+</div>
+
+<script>
+(function () {
+'use strict';
+const N = 1023;
+const C_LIGHT = 299792458, CHIP_S = 1 / 1.023e6;
+const $ = s => document.querySelector(s);
+const fmt = (v, d = 3) => (Math.abs(v) < 0.5 * Math.pow(10, -d) ? 0 : v).toFixed(d).replace('.', ',').replace(/^-0,0+$/, '0');
+
+/* ---------- Tema Claro / Escuro ---------- */
+let T = {};
+function readTheme() {
+  const cs = getComputedStyle(document.documentElement), g = n => cs.getPropertyValue(n).trim();
+  T = { ink: g('--ink'), muted: g('--muted'), grid: g('--grid'), rule: g('--rule'), accent: g('--accent'), warm: g('--warm'),
+        pos: g('--pos'), neg: g('--neg'), surface: g('--surface'), bg: g('--bg'), sat: [g('--s1'), g('--s2'), g('--s3'), g('--s4')] };
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const txt = $('#themeTxt'), ico = $('#themeIcon');
+  if (txt) txt.textContent = isDark ? 'Claro' : 'Escuro';
+  if (ico) ico.textContent = isDark ? '☀' : '☾';
+}
+$('#btnTheme').addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark = cur ? cur === 'dark' : sysDark;
+  document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  readTheme();
+  drawAll();
+});
+
+const MONO = '11px "JetBrains Mono", ui-monospace, Menlo, monospace';
+const DISP = '600 11px "Archivo", "Helvetica Neue", Arial, sans-serif';
+
+/* ---------- Utilidades de Debuxo 2D ---------- */
+function prep(cv, H) {
+  const dpr = window.devicePixelRatio || 1, W = Math.max(220, cv.clientWidth || cv.parentNode.clientWidth);
+  cv.style.height = H + 'px'; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+  return { c, W, H };
+}
+function plot(cv, o) {
+  const { c, W, H } = prep(cv, o.h || 200);
+  const m = { l: o.ml || 48, r: 12, t: 10, b: 24 };
+  const X = x => m.l + (x - o.x0) / (o.x1 - o.x0) * (W - m.l - m.r);
+  const Y = y => m.t + (o.y1 - y) / (o.y1 - o.y0) * (H - m.t - m.b);
+  c.font = MONO; c.lineWidth = 1;
+  (o.yt || []).forEach(v => { const y = Math.round(Y(v)) + .5; c.strokeStyle = T.grid; c.beginPath(); c.moveTo(m.l, y); c.lineTo(W - m.r, y); c.stroke();
+    c.fillStyle = T.muted; c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillText(o.yf ? o.yf(v) : v, m.l - 6, y); });
+  (o.xt || []).forEach(v => { const x = Math.round(X(v)) + .5; c.strokeStyle = T.grid; c.beginPath(); c.moveTo(x, m.t); c.lineTo(x, H - m.b); c.stroke();
+    c.fillStyle = T.muted; c.textAlign = 'center'; c.textBaseline = 'top'; c.fillText(o.xf ? o.xf(v) : v, x, H - m.b + 6); });
+  if (o.y0 < 0 && o.y1 > 0) { const y = Math.round(Y(0)) + .5; c.strokeStyle = T.rule; c.lineWidth = 1.3; c.beginPath(); c.moveTo(m.l, y); c.lineTo(W - m.r, y); c.stroke(); }
+  c.save(); c.beginPath(); c.rect(m.l, m.t - 3, W - m.l - m.r, H - m.t - m.b + 6); c.clip();
+  (o.series || []).forEach(s => {
+    const n = s.y.length, xv = i => (s.x ? s.x[i] : i);
+    if (s.fill) {
+      const p = new Path2D(), y0 = Y(0);
+      p.moveTo(X(xv(0)), y0);
+      for (let i = 0; i < n; i++) { p.lineTo(X(xv(i)), Y(s.y[i])); if (s.step) p.lineTo(X(xv(i) + 1), Y(s.y[i])); }
+      p.lineTo(X(s.step ? xv(n - 1) + 1 : xv(n - 1)), y0); p.closePath();
+      c.save(); c.beginPath(); c.rect(0, 0, W, y0); c.clip(); c.fillStyle = T.pos; c.fill(p); c.restore();
+      c.save(); c.beginPath(); c.rect(0, y0, W, H); c.clip(); c.fillStyle = T.neg; c.fill(p); c.restore();
+    }
+    c.strokeStyle = s.color; c.lineWidth = s.w || 1.7; c.setLineDash(s.dash || []); c.lineJoin = 'round';
+    c.beginPath(); let on = false;
+    for (let i = 0; i < n; i++) {
+      const v = s.y[i]; if (v == null || Number.isNaN(v)) { on = false; continue; }
+      const px = X(xv(i)), py = Y(v);
+      if (!on) { c.moveTo(px, py); on = true; } else c.lineTo(px, py);
+      if (s.step) c.lineTo(X(xv(i) + 1), py);
+    }
+    c.stroke(); c.setLineDash([]);
+  });
+  (o.vlines || []).forEach(v => { const x = Math.round(X(v.x)) + .5; c.strokeStyle = v.color; c.lineWidth = v.w || 1.5; c.setLineDash(v.dash || []);
+    c.beginPath(); c.moveTo(x, m.t); c.lineTo(x, H - m.b); c.stroke(); c.setLineDash([]); });
+  (o.dots || []).forEach(d => { c.fillStyle = d.color; c.strokeStyle = T.surface; c.lineWidth = 2; c.beginPath(); c.arc(X(d.x), Y(d.y), d.r || 5, 0, 2 * Math.PI); c.fill(); c.stroke(); });
+  (o.tri || []).forEach(d => { const x = X(d.x); c.fillStyle = d.color; c.beginPath(); c.moveTo(x - 5, m.t); c.lineTo(x + 5, m.t); c.lineTo(x, m.t + 8); c.closePath(); c.fill(); });
+  c.restore();
+  return { X, Y, m, W, H };
+}
+const piLab = v => { const k = Math.round(v / (Math.PI / 2)); if (k === 0) return '0'; if (k % 2 === 0) { const q = k / 2; return (q === 1 ? '' : q) + 'π'; } return k + 'π/2'; };
+const piTicks = max => { const a = []; for (let v = 0; v <= max + 1e-6; v += Math.PI / 2) a.push(v); return a; };
+
+/* ---------- Xerador de Códigos C/A (IS-GPS-200) ---------- */
+const G2T = [[2,6],[3,7],[4,8],[5,9],[1,9],[2,10],[1,8],[2,9],[3,10],[2,3],[3,4],[5,6],[6,7],[7,8],[8,9],[9,10],[1,4],[2,5],[3,6],[4,7],[5,8],[6,9],[1,3],[4,6],[5,7],[6,8],[7,9],[8,10],[1,6],[2,7],[3,8],[4,9]];
+function caCode(prn) {
+  const g1 = new Array(11).fill(1), g2 = new Array(11).fill(1), out = new Int8Array(N), [a, b] = G2T[prn - 1];
+  for (let i = 0; i < N; i++) {
+    out[i] = (g1[10] ^ g2[a] ^ g2[b]) ? -1 : 1;
+    const f1 = g1[3] ^ g1[10], f2 = g2[2] ^ g2[3] ^ g2[6] ^ g2[8] ^ g2[9] ^ g2[10];
+    for (let k = 10; k > 1; k--) { g1[k] = g1[k - 1]; g2[k] = g2[k - 1]; }
+    g1[1] = f1; g2[1] = f2;
+  }
+  return out;
+}
+const CODES = []; for (let p = 1; p <= 32; p++) CODES[p] = caCode(p);
+const md = (a) => ((a % N) + N) % N;
+function corr(sig, code, norm) {
+  const R = new Float64Array(N);
+  for (let k = 0; k < N; k++) { let s = 0; for (let n = 0; n < N; n++) { let j = n - k; if (j < 0) j += N; s += sig[n] * code[j]; } R[k] = norm ? s / N : s; }
+  return R;
+}
+function fillPrn(sel, v) { for (let p = 1; p <= 32; p++) { const o = document.createElement('option'); o.value = p; o.textContent = 'PRN ' + p; sel.appendChild(o); } sel.value = v; }
+
+/* =================== Sección 2a: Ortogonalidade =================== */
+const ort = { m: 1, n: 2, g: 'sin' };
+function seg(el, vals, init, cb) {
+  el.innerHTML = vals.map(v => `<button type="button" data-v="${v}" aria-pressed="${v == init}">${v}</button>`).join('');
+  el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; el.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); cb(b.dataset.v); });
+}
+seg($('#segM'), [1, 2, 3, 4], 1, v => { ort.m = +v; drawOrt(); });
+seg($('#segN'), [1, 2, 3, 4], 2, v => { ort.n = +v; drawOrt(); });
+$('#segG').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; $('#segG').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); ort.g = b.dataset.v; drawOrt(); });
+function drawOrt() {
+  const M = 400, ts = [], f = [], g = [], p = [];
+  for (let i = 0; i <= M; i++) { const t = 2 * Math.PI * i / M; ts.push(t); f.push(Math.sin(ort.m * t)); g.push(ort.g === 'sin' ? Math.sin(ort.n * t) : Math.cos(ort.n * t)); p.push(f[i] * g[i]); }
+  let I = 0; for (let i = 0; i < M; i++) I += (p[i] + p[i + 1]) / 2 * (2 * Math.PI / M);
+  $('#lblF').textContent = `f(t) = sin(${ort.m === 1 ? '' : ort.m}t)`;
+  $('#lblG').textContent = `g(t) = ${ort.g}(${ort.n === 1 ? '' : ort.n}t)`;
+  const base = { x0: 0, x1: 2 * Math.PI, xt: piTicks(2 * Math.PI), xf: piLab, h: 190, ml: 40 };
+  plot($('#cvOrtA'), { ...base, y0: -1.25, y1: 1.25, yt: [-1, 0, 1], series: [{ x: ts, y: f, color: T.accent, w: 2 }, { x: ts, y: g, color: T.warm, w: 2 }] });
+  plot($('#cvOrtB'), { ...base, y0: -1.25, y1: 1.25, yt: [-1, 0, 1], series: [{ x: ts, y: p, color: T.ink, w: 1.6, fill: true }] });
+  $('#roOrt').textContent = Math.abs(I - Math.PI) < 1e-3 ? 'π ≈ 3,142' : fmt(I);
+  $('#roOrtTxt').textContent = Math.abs(I) < 1e-3 ? '✓ As áreas positiva e negativa compénsanse exactamente: as funcións son ortogonais.' : '✓ Frecuencia e fase idénticas: o produto é sempre positivo (sin² ≥ 0) e a integral vale π.';
+}
+
+/* =================== Sección 2b: Atraso cun seno =================== */
+function drawSin() {
+  const tau = +$('#rgTau').value, th = +$('#rgTh').value;
+  $('#vTau').textContent = fmt(tau, 2) + ' rad'; $('#vTh').textContent = fmt(th, 2) + ' rad';
+  const M = 300, ts = [], r = [], l = [], p = [];
+  for (let i = 0; i <= M; i++) { const t = 2 * Math.PI * i / M; ts.push(t); r.push(Math.sin(t - tau)); l.push(Math.sin(t - th)); p.push(r[i] * l[i]); }
+  const base = { x0: 0, x1: 2 * Math.PI, xt: piTicks(2 * Math.PI), xf: piLab, ml: 40 };
+  plot($('#cvSinA'), { ...base, h: 150, y0: -1.25, y1: 1.25, yt: [-1, 0, 1], series: [{ x: ts, y: r, color: T.accent, w: 2 }, { x: ts, y: l, color: T.warm, w: 2, dash: [6, 4] }] });
+  plot($('#cvSinB'), { ...base, h: 120, y0: -1.25, y1: 1.25, yt: [-1, 0, 1], series: [{ x: ts, y: p, color: T.ink, w: 1.4, fill: true }] });
+  const xs = [], cy = [], X1 = 4 * Math.PI; for (let i = 0; i <= 400; i++) { const v = X1 * i / 400; xs.push(v); cy.push(Math.PI * Math.cos(v - tau)); }
+  const Cv = Math.PI * Math.cos(th - tau);
+  const peaks = [tau, tau + 2 * Math.PI].filter(v => v <= X1);
+  plot($('#cvSinC'), { x0: 0, x1: X1, xt: piTicks(X1), xf: piLab, h: 290, ml: 40, y0: -3.6, y1: 3.6, yt: [-3, -2, -1, 0, 1, 2, 3],
+    series: [{ x: xs, y: cy, color: T.ink, w: 2 }],
+    vlines: [...peaks.map(v => ({ x: v, color: T.accent, dash: [3, 4], w: 1.2 })), { x: th, color: T.warm, w: 1.5 }],
+    dots: [{ x: th, y: Cv, color: T.warm, r: 6 }] });
+  $('#roSin').textContent = fmt(Cv);
+}
+['#rgTau', '#rgTh'].forEach(id => $(id).addEventListener('input', drawSin));
+let sinAnim = null;
+$('#btnSweepSin').addEventListener('click', () => {
+  if (sinAnim) { cancelAnimationFrame(sinAnim); sinAnim = null; $('#btnSweepSin').textContent = 'Varrer τ̂'; return; }
+  const el = $('#rgTh'); let v = 0; $('#btnSweepSin').textContent = 'Deter';
+  const step = () => { v += 0.05; el.value = v; drawSin(); if (v < 12.56) sinAnim = requestAnimationFrame(step); else { sinAnim = null; $('#btnSweepSin').textContent = 'Varrer τ̂'; } };
+  step();
+});
+
+/* =================== Sección 3: Códigos Gold =================== */
+fillPrn($('#selA'), 1); fillPrn($('#selB'), 7);
+let gold = {};
+function computeGold() {
+  const a = +$('#selA').value, b = +$('#selB').value;
+  gold = { a, b, auto: corr(CODES[a], CODES[a], false), cross: corr(CODES[a], CODES[b], false) };
+}
+function drawStack(cv, traces, opts = {}) {
+  const lane = opts.lane || 34, gap = opts.gap || 10, H = traces.length * (lane + gap) + 8;
+  const { c, W } = prep(cv, H); const L = opts.ml || 78, R = 10, len = traces[0].y.length;
+  const X = i => L + i / len * (W - L - R);
+  traces.forEach((tr, k) => {
+    const top = 4 + k * (lane + gap), mid = top + lane / 2, amp = (lane / 2 - 2) / (tr.scale || 1);
+    c.strokeStyle = T.grid; c.lineWidth = 1; c.beginPath(); c.moveTo(L, Math.round(mid) + .5); c.lineTo(W - R, Math.round(mid) + .5); c.stroke();
+    c.font = DISP; c.fillStyle = tr.color; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(tr.label, 4, mid);
+    c.strokeStyle = tr.color; c.lineWidth = tr.w || 1.6; c.beginPath();
+    for (let i = 0; i < len; i++) { const y = mid - tr.y[i] * amp; if (i === 0) c.moveTo(X(0), y); else c.lineTo(X(i), y); c.lineTo(X(i + 1), y); }
+    c.stroke();
+  });
+}
+function drawGold() {
+  const z = $('#chkZoom').checked, a = gold.a, b = gold.b;
+  drawStack($('#cvChips'), [
+    { label: 'PRN ' + a, y: Array.from(CODES[a].slice(0, 64)), color: T.accent },
+    { label: 'PRN ' + b, y: Array.from(CODES[b].slice(0, 64)), color: T.warm }], { lane: 30 });
+  const yr = z ? { y0: -90, y1: 90 } : { y0: -120, y1: 1100 };
+  const ytAuto = z ? [-65, 0, 63] : [0, 250, 500, 750, 1023];
+  plot($('#cvAuto'), { x0: 0, x1: N, xt: [0, 256, 512, 768, 1023], h: 210, y0: yr.y0, y1: yr.y1, yt: ytAuto, series: [{ y: Array.from(gold.auto), color: T.accent, w: 1.1 }] });
+  plot($('#cvCross'), { x0: 0, x1: N, xt: [0, 256, 512, 768, 1023], h: 210, y0: yr.y0, y1: yr.y1, yt: ytAuto, series: [{ y: Array.from(gold.cross), color: T.warm, w: 1.1 }] });
+  const sideVals = [...new Set(Array.from(gold.auto.slice(1)))].sort((x, y) => x - y);
+  const crossVals = [...new Set(Array.from(gold.cross))].sort((x, y) => x - y);
+  const mx = Math.max(...Array.from(gold.cross).map(Math.abs));
+  $('#roAutoVals').textContent = '{ ' + sideVals.join(', ').replace(/-/g, '−') + ' }';
+  $('#roCrossVals').textContent = a === b ? 'mesmo código' : '{ ' + crossVals.join(', ').replace(/-/g, '−') + ' }';
+  $('#roCrossMax').textContent = mx + ' (' + fmt(100 * mx / 1023, 1) + ' % do pico)';
+}
+['#selA', '#selB'].forEach(id => $(id).addEventListener('change', () => { computeGold(); drawGold(); }));
+$('#chkZoom').addEventListener('change', drawGold);
+
+/* =================== Sección 4: Simulador do Receptor =================== */
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+let rand = rng(20261023);
+const gauss = () => { let u = 0, v = 0; while (u === 0) u = rand(); v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+let Z = new Float64Array(N); for (let i = 0; i < N; i++) Z[i] = gauss();
+
+const sats = [
+  { on: true, prn: 5, tau: 137, A: 1.0 },
+  { on: true, prn: 12, tau: 600, A: 0.8 },
+  { on: true, prn: 19, tau: 845, A: 1.0 },
+  { on: true, prn: 24, tau: 322, A: 0.6 }];
+let rx = new Float64Array(N);
+const st = { prn: 5, k: 0, R: null, seen: new Uint8Array(N), anim: null, acq: null };
+
+function buildRows() {
+  const tb = $('#satRows'); tb.innerHTML = '';
+  sats.forEach((s, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><input type="checkbox" id="on${i}" ${s.on ? 'checked' : ''} aria-label="Satélite ${i + 1} activo"></td>
+      <td><span class="dot" style="background:var(--s${i + 1})"></span> <select id="prn${i}" aria-label="PRN do satélite ${i + 1}"></select></td>
+      <td class="sol"><input type="number" id="tau${i}" min="0" max="1022" step="1" value="${s.tau}" aria-label="Atraso do satélite ${i + 1}"></td>
+      <td><div class="amp"><input type="range" id="amp${i}" min="0.2" max="1.5" step="0.05" value="${s.A}" aria-label="Amplitude do satélite ${i + 1}"><span class="val" id="ampv${i}" style="font-family:var(--f-mono);font-size:.85rem">${fmt(s.A, 2)}</span></div></td>
+      <td class="dist sol" id="dist${i}"></td>`;
+    tb.appendChild(tr);
+    fillPrn(tr.querySelector('select'), s.prn);
+    tr.querySelector('#on' + i).addEventListener('change', e => { s.on = e.target.checked; scenarioChanged(); });
+    tr.querySelector('#prn' + i).addEventListener('change', e => { s.prn = +e.target.value; scenarioChanged(); });
+    tr.querySelector('#tau' + i).addEventListener('change', e => { s.tau = Math.max(0, Math.min(1022, Math.round(+e.target.value || 0))); e.target.value = s.tau; scenarioChanged(); });
+    tr.querySelector('#amp' + i).addEventListener('input', e => { s.A = +e.target.value; $('#ampv' + i).textContent = fmt(s.A, 2); scenarioChanged(); });
+  });
+}
+function updDist() { sats.forEach((s, i) => { $('#dist' + i).textContent = fmt(s.tau * CHIP_S * C_LIGHT / 1000, 2) + ' km'; }); }
+function buildRx() {
+  const sg = +$('#rgNoise').value;
+  for (let n = 0; n < N; n++) rx[n] = sg * Z[n];
+  sats.forEach(s => { if (!s.on) return; const c = CODES[s.prn]; for (let n = 0; n < N; n++) rx[n] += s.A * c[md(n - s.tau)]; });
+}
+function computeR() { st.R = corr(rx, CODES[st.prn], true); }
+function detectStats(R) {
+  let pk = -Infinity, pi = 0; for (let k = 0; k < N; k++) if (R[k] > pk) { pk = R[k]; pi = k; }
+  let s = 0, s2 = 0, c = 0; for (let k = 0; k < N; k++) { if (Math.abs(k - pi) <= 1) continue; s += R[k]; s2 += R[k] * R[k]; c++; }
+  const mu = s / c, sd = Math.sqrt(Math.max(1e-12, s2 / c - mu * mu));
+  return { pk, pi, ratio: (pk - mu) / sd };
+}
+const THRESH = 6;
+
+function drawStack1() {
+  const L = 60, tr = [];
+  sats.forEach((s, i) => { if (!s.on) return; const y = []; for (let n = 0; n < L; n++) y.push(s.A * CODES[s.prn][md(n - s.tau)]); tr.push({ label: 'PRN ' + s.prn, y, color: T.sat[i], scale: 1.5 }); });
+  const y = Array.from(rx.slice(0, L)); const sc = Math.max(1, ...y.map(Math.abs));
+  tr.push({ label: 'Recibido', y, color: T.ink, scale: sc, w: 1.8 });
+  drawStack($('#cvStack'), tr, { lane: 32, gap: 10 });
+}
+function drawRx() {
+  const L = 120, k = st.k, cp = CODES[st.prn];
+  const s = Array.from(rx.slice(0, L)), r = [], p = [];
+  for (let n = 0; n < L; n++) { r.push(cp[md(n - k)]); p.push(s[n] * r[n]); }
+  const sc = Math.ceil(Math.max(1.5, ...s.map(Math.abs)));
+  plot($('#cvRx'), { x0: 0, x1: L, xt: [0, 20, 40, 60, 80, 100, 120], h: 170, ml: 36, y0: -sc * 1.08, y1: sc * 1.08, yt: [-sc, 0, sc],
+    series: [{ y: s, color: T.ink, w: 1.2, step: true }, { y: r, color: T.warm, w: 1.6, step: true }] });
+  plot($('#cvProd'), { x0: 0, x1: L, xt: [0, 20, 40, 60, 80, 100, 120], h: 130, ml: 36, y0: -sc * 1.08, y1: sc * 1.08, yt: [-sc, 0, sc],
+    series: [{ y: p, color: T.ink, w: 1, step: true, fill: true }] });
+}
+function drawCorr() {
+  const R = st.R, y = new Array(N); let nSeen = 0, best = -Infinity, bi = -1, ymax = 1.1, ymin = -0.3;
+  for (let k = 0; k < N; k++) { if (st.seen[k]) { y[k] = R[k]; nSeen++; if (R[k] > best) { best = R[k]; bi = k; } ymax = Math.max(ymax, R[k] * 1.1); ymin = Math.min(ymin, R[k] * 1.1); } else y[k] = NaN; }
+  const hide = $('#chkHide').checked;
+  const tri = hide ? [] : sats.map((s, i) => s.on ? { x: s.tau, color: T.sat[i] } : null).filter(Boolean);
+  const yt = []; for (let v = Math.ceil(ymin * 2) / 2; v <= ymax; v += 0.5) yt.push(+v.toFixed(1));
+  plot($('#cvCorr'), { x0: 0, x1: N, xt: [0, 256, 512, 768, 1023], h: 290, ml: 40, y0: ymin, y1: ymax, yt, yf: v => fmt(v, 1),
+    series: [{ y, color: T.accent, w: 1.3 }], vlines: [{ x: st.k, color: T.warm, w: 1.4, dash: [4, 3] }],
+    dots: [{ x: st.k, y: R[st.k], color: T.warm, r: 5 }], tri });
+  $('#keyTrue').hidden = hide;
+  $('#vK').textContent = st.k + ' chips';
+  $('#roC').textContent = fmt(R[st.k]);
+  $('#roBest').textContent = bi < 0 ? '—' : `τ̂ = ${bi} · C = ${fmt(best)}`;
+  const status = $('#roStatus'), conv = $('#roConv');
+  if (nSeen < N) {
+    status.className = 'status no';
+    status.textContent = nSeen === 0 ? 'Move τ̂ ou preme «Varrer todos os atrasos».' : `Probados ${nSeen} de ${N} desprazamentos.`;
+    conv.innerHTML = '';
+  } else {
+    const d = detectStats(R);
+    if (d.ratio > THRESH) {
+      status.className = 'status ok';
+      status.textContent = `✓ PRN ${st.prn} detectado con éxito: pico en τ̂ = ${d.pi} chips (${fmt(d.ratio, 1)}σ sobre o piso de ruído).`;
+      const us = d.pi * CHIP_S * 1e6, km = d.pi * CHIP_S * C_LIGHT / 1000;
+      conv.innerHTML = `<div><span class="k">Atraso medido</span><b>${d.pi} chips</b></div><div><span class="k">Tempo (mód. 1 ms)</span><b>${fmt(us, 2)} µs</b></div><div><span class="k">Pseudodistancia</span><b>${fmt(km, 2)} km</b></div><div><span class="k">Amplitude estimada</span><b>${fmt(d.pk, 2)}</b></div>`;
+    } else {
+      status.className = 'status no';
+      status.textContent = `✕ Ningún pico supera o limiar (máximo ${fmt(d.ratio, 1)}σ). O PRN ${st.prn} non está presente ou o ruído é extremo.`;
+      conv.innerHTML = '';
+    }
+  }
+}
+function computeAcq() { const out = []; for (let p = 1; p <= 32; p++) out[p] = detectStats(corr(rx, CODES[p], true)); st.acq = out; }
+let acqGeom = null;
+function drawAcq() {
+  if (!st.acq) return;
+  const cv = $('#cvAcq'), { c, W, H } = prep(cv, 220), m = { l: 42, r: 12, t: 14, b: 28 };
+  const vals = st.acq.slice(1).map(d => d.ratio), ymax = Math.max(THRESH * 1.6, ...vals) * 1.08;
+  const bw = (W - m.l - m.r) / 32, Y = v => m.t + (1 - v / ymax) * (H - m.t - m.b);
+  c.font = MONO; c.textAlign = 'right'; c.textBaseline = 'middle';
+  const stepT = ymax > 60 ? 20 : ymax > 25 ? 10 : 5;
+  for (let v = 0; v <= ymax; v += stepT) { const y = Math.round(Y(v)) + .5; c.strokeStyle = T.grid; c.lineWidth = 1; c.beginPath(); c.moveTo(m.l, y); c.lineTo(W - m.r, y); c.stroke(); c.fillStyle = T.muted; c.fillText(v, m.l - 6, y); }
+  const satIdx = {}; sats.forEach((s, i) => { if (s.on) satIdx[s.prn] = i; });
+  const hide = $('#chkHide').checked;
+  for (let p = 1; p <= 32; p++) {
+    const v = st.acq[p].ratio, x = m.l + (p - 1) * bw + bw * .15, w = bw * .7, det = v > THRESH;
+    c.fillStyle = det ? (satIdx[p] !== undefined && !hide ? T.sat[satIdx[p]] : T.accent) : T.rule;
+    c.fillRect(x, Y(v), w, Y(0) - Y(v));
+    if (p === st.prn) { c.strokeStyle = T.warm; c.lineWidth = 2; c.strokeRect(x - 2, Y(v) - 2, w + 4, Y(0) - Y(v) + 4); }
+    if (bw > 16 || p % 2 === 1) { c.fillStyle = p === st.prn ? T.warm : T.muted; c.textAlign = 'center'; c.textBaseline = 'top'; c.fillText(p, x + w / 2, H - m.b + 6); }
+  }
+  const yt = Math.round(Y(THRESH)) + .5; c.strokeStyle = T.warm; c.setLineDash([5, 4]); c.lineWidth = 1.3; c.beginPath(); c.moveTo(m.l, yt); c.lineTo(W - m.r, yt); c.stroke(); c.setLineDash([]);
+  c.font = DISP; c.fillStyle = T.warm; c.textAlign = 'right'; c.textBaseline = 'bottom'; c.fillText('limiar de detección (6σ)', W - m.r, yt - 4);
+  c.save(); c.translate(12, m.t + (H - m.t - m.b) / 2); c.rotate(-Math.PI / 2); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = T.muted; c.font = DISP; c.fillText('pico / ruído', 0, 0); c.restore();
+  acqGeom = { m, bw };
+}
+$('#cvAcq').addEventListener('click', e => {
+  if (!acqGeom) return; const r = e.currentTarget.getBoundingClientRect(); const p = Math.floor((e.clientX - r.left - acqGeom.m.l) / acqGeom.bw) + 1;
+  if (p >= 1 && p <= 32) { $('#selSearch').value = p; searchChanged(); $('#selSearch').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+});
+
+let acqTimer = null;
+function scenarioChanged() {
+  $('#vNoise').textContent = fmt(+$('#rgNoise').value, 1);
+  updDist(); buildRx(); computeR(); drawStack1(); drawRx(); drawCorr();
+  draw3DScene();
+  clearTimeout(acqTimer); acqTimer = setTimeout(() => { computeAcq(); drawAcq(); }, 120);
+}
+function searchChanged() { st.prn = +$('#selSearch').value; st.seen.fill(0); stopSweep(); computeR(); drawRx(); drawCorr(); drawAcq(); }
+let lastK = 0;
+$('#rgK').addEventListener('input', e => {
+  const k = +e.target.value, a = Math.min(lastK, k), b = Math.max(lastK, k);
+  if (b - a < 60) for (let i = a; i <= b; i++) st.seen[i] = 1; else st.seen[k] = 1;
+  lastK = k; st.k = k; drawRx(); drawCorr();
+});
+function stopSweep() { if (st.anim) { cancelAnimationFrame(st.anim); st.anim = null; } $('#btnSweep').textContent = 'Varrer todos os atrasos'; }
+$('#btnSweep').addEventListener('click', () => {
+  if (st.anim) { stopSweep(); return; }
+  $('#btnSweep').textContent = 'Deter'; let k = 0;
+  const stepF = () => { for (let j = 0; j < 7 && k < N; j++, k++) st.seen[k] = 1; st.k = Math.min(k, N - 1); lastK = st.k; $('#rgK').value = st.k; drawRx(); drawCorr();
+    if (k < N) st.anim = requestAnimationFrame(stepF); else stopSweep(); };
+  stepF();
+});
+$('#btnClear').addEventListener('click', () => { stopSweep(); st.seen.fill(0); drawCorr(); });
+$('#selSearch').addEventListener('change', searchChanged);
+$('#rgNoise').addEventListener('input', scenarioChanged);
+$('#chkHide').addEventListener('change', () => { $('#scenario').classList.toggle('hidden-sol', $('#chkHide').checked); drawCorr(); drawAcq(); });
+$('#btnRandom').addEventListener('click', () => {
+  const pool = Array.from({ length: 32 }, (_, i) => i + 1); for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  sats.forEach((s, i) => { s.on = true; s.prn = pool[i]; s.tau = Math.floor(Math.random() * N); s.A = Math.round((0.5 + Math.random() * 0.7) * 20) / 20; });
+  rand = rng(Math.floor(Math.random() * 1e9)); for (let i = 0; i < N; i++) Z[i] = gauss();
+  buildRows(); st.seen.fill(0); stopSweep(); scenarioChanged();
+});
+
+/* =================== Sección 5: Motor 3D de Satélites e Trilateración =================== */
+const R_EARTH = 6371;   // km
+const R_ORBIT = 26560;  // km (raio orbital GPS MEO)
+const SCALE_3D = 1 / 26560; // Normalización para cámara 3D
+
+// Posición do receptor na Terra (Galicia: ~42.88° N, -8.54° W)
+const recLat = 42.88 * Math.PI / 180;
+const recLon = -8.54 * Math.PI / 180;
+const recPos = {
+  x: R_EARTH * Math.cos(recLat) * Math.cos(recLon),
+  y: R_EARTH * Math.cos(recLat) * Math.sin(recLon),
+  z: R_EARTH * Math.sin(recLat)
+};
+
+// 4 planos orbitais inclinados 55° con ascensións rectas e anomalías ben distribuídas sobre o hemisferio visible
+const satOrbits = [
+  { inc: 55 * Math.PI / 180, raan: -25 * Math.PI / 180, u0: 0.95 },
+  { inc: 55 * Math.PI / 180, raan:  40 * Math.PI / 180, u0: 0.42 },
+  { inc: 55 * Math.PI / 180, raan: -85 * Math.PI / 180, u0: 1.28 },
+  { inc: 55 * Math.PI / 180, raan:  95 * Math.PI / 180, u0: 2.15 }
+];
+
+const view3D = {
+  yaw: -0.65,
+  pitch: 0.42,
+  zoom: 1.08,
+  mode: 4,         // 1, 2, 3 ou 4 satélites
+  clockUs: 450,    // erro do reloxo en microsegundos
+  showSpheres: true,
+  autoRot: true,
+  orbPhase: 0,
+  wavePhase: 0,
+  dragging: false,
+  lx: 0,
+  ly: 0
+};
+
+function orbitPoint(inc, raan, u, r = R_ORBIT) {
+  const xOrb = r * Math.cos(u), yOrb = r * Math.sin(u);
+  const x = xOrb * Math.cos(raan) - yOrb * Math.cos(inc) * Math.sin(raan);
+  const y = xOrb * Math.sin(raan) + yOrb * Math.cos(inc) * Math.cos(raan);
+  const z = yOrb * Math.sin(inc);
+  return { x, y, z };
+}
+
+function getSatPositions3D() {
+  return satOrbits.map((o, i) => {
+    const du = (sats[i].tau / 1023 - 0.5) * 0.25 + view3D.orbPhase * 0.12 * (i % 2 === 0 ? 1 : -1);
+    const p = orbitPoint(o.inc, o.raan, o.u0 + du, R_ORBIT);
+    const dx = p.x - recPos.x, dy = p.y - recPos.y, dz = p.z - recPos.z;
+    const dist = Math.hypot(dx, dy, dz);
+    return { ...p, dist, prn: sats[i].prn, color: T.sat[i] || '#5fa0ff', idx: i };
+  });
+}
+
+function project3D(p, W, H) {
+  // Rotación cámara (Z-up -> pantalla)
+  const cy = Math.cos(view3D.yaw), sy = Math.sin(view3D.yaw);
+  const cp = Math.cos(view3D.pitch), sp = Math.sin(view3D.pitch);
+  const nx = p.x * SCALE_3D, ny = p.y * SCALE_3D, nz = p.z * SCALE_3D;
+  const x1 = -nx * sy + ny * cy;
+  const y1 = -nx * cy - ny * sy;
+  const z1 = nz;
+  const x2 = x1;
+  const y2 = y1 * sp + z1 * cp;
+  const depth = y1 * cp - z1 * sp; // profundidade cara á cámara
+  const fov = 2.8;
+  const persp = fov / (fov + depth * 0.65);
+  const scale = Math.min(W, H) * 0.41 * view3D.zoom * persp;
+  return {
+    sx: W * 0.5 + x2 * scale,
+    sy: H * 0.52 - y2 * scale,
+    depth,
+    scale
+  };
+}
+
+// Contornos continentais simplificados en (lat, lon) para renderizado 3D esférico
+const CONTINENTS = [
+  // Europa + Península Ibérica / Galicia + Escandinavia
+  [[36,-9],[37,-9],[39,-9.5],[41.2,-8.8],[43.3,-9.2],[43.7,-7.5],[43.4,-1.8],[46,-1.2],[48.5,-4.5],[50,1.5],[51,4.2],[54,8.5],[57,8.5],[55,12],[59,10.5],[62,5],[69,16],[71,28],[67,41],[60,30],[55,21],[54,14],[47,16],[45,12.5],[41,16.5],[38,15.5],[40,18.5],[45,14],[44,20],[40,26],[38,24],[42,28],[45,36],[42,41],[36,36],[36,28],[38,21],[40,16],[43,5],[42,3],[38,-0.5],[36,-5.5]],
+  // África
+  [[35.8,-5.5],[37,10.5],[33,11.5],[32,25],[31.5,32.5],[28,34.5],[20,38],[12,44],[11.8,51],[2,45],[-4,40],[-15,40.5],[-26,33],[-34.8,20],[-34,18],[-22,14],[-12,13.5],[-5,12],[4,9.5],[6,3],[4.5,-7.5],[10,-14],[15,-17.5],[21,-17],[28,-13],[32,-9.5]],
+  // Gran Bretaña e Irlanda
+  [[50,-5.2],[51.5,1.3],[53.5,0.2],[56,-2],[58.6,-3.2],[57.5,-6],[55,-5],[53,-4.5],[51.5,-5]],
+  [[51.5,-10],[52.2,-6.2],[54.5,-5.8],[55.3,-7.5],[53.5,-10]],
+  // América do Norte e Central
+  [[70,-162],[71,-154],[69,-136],[60,-140],[55,-131],[48,-124.5],[40,-124],[34,-120],[23,-110],[28,-112],[18,-103],[15,-93],[8,-78],[9,-77],[15,-83],[21,-87],[21,-90],[19,-96],[26,-97],[30,-89],[29,-83],[25,-80],[31,-81],[35,-75.5],[40,-74],[42,-70],[45,-66],[47,-64],[50,-66],[52,-56],[59,-64],[63,-78],[60,-94],[68,-82],[72,-80],[74,-95],[70,-120],[70,-145]],
+  // Groenlandia
+  [[60,-44],[65,-40],[70,-22],[77,-19],[82,-32],[81,-58],[76,-70],[70,-54],[64,-52]],
+  // América do Sur
+  [[10,-75],[11,-63],[6,-52],[0,-50],[-5,-35],[-13,-38],[-23,-42],[-33,-52],[-38,-57],[-47,-66],[-54.5,-67],[-53,-73],[-42,-74],[-30,-71.5],[-18,-71],[-12,-77],[-5,-81],[2,-79]],
+  // Asia / Eurasia oriental
+  [[36,36],[30,48],[26,56],[22,60],[25,67],[19,73],[8,77.5],[16,82],[22,89],[16,97],[2,103],[8,105],[21,108],[23,117],[31,122],[36,120],[39,122],[40,124],[35,129],[43,132],[52,141],[60,143],[62,163],[66,170],[70,178],[72,140],[76,105],[71,72],[69,48],[45,36]],
+  // Xapón
+  [[31,130.5],[34.5,135],[35.5,140.5],[41,141],[44,145],[40,140],[36,136],[33,131]],
+  // Australia
+  [[-12,131],[-12,142],[-19,147],[-28,153.5],[-38,147],[-35,137],[-32,128],[-34,115],[-22,114],[-15,124]]
+];
+
+function latLonToECEF(latDeg, lonDeg, r = R_EARTH) {
+  const la = latDeg * Math.PI / 180, lo = lonDeg * Math.PI / 180;
+  return { x: r * Math.cos(la) * Math.cos(lo), y: r * Math.cos(la) * Math.sin(lo), z: r * Math.sin(la) };
+}
+
+function roundRectBadge(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.lineTo(x + w - r, y);
+  c.quadraticCurveTo(x + w, y, x + w, y + r);
+  c.lineTo(x + w, y + h - r);
+  c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  c.lineTo(x + r, y + h);
+  c.quadraticCurveTo(x, y + h, x, y + h - r);
+  c.lineTo(x, y + r);
+  c.quadraticCurveTo(x, y, x + r, y);
+  c.closePath();
+}
+
+function draw3DScene() {
+  const cv = $('#cv3D');
+  if (!cv) return;
+  const wrap = cv.parentNode;
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.max(260, wrap.clientWidth);
+  const H = Math.max(520, wrap.clientHeight || 520);
+  cv.style.width = W + 'px';
+  cv.style.height = H + 'px';
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+  }
+  const c = cv.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, W, H);
+
+  const sat3D = getSatPositions3D();
+  const biasKm = view3D.clockUs * 1e-6 * C_LIGHT / 1000;
+  $('#vClockBias').textContent = `${view3D.clockUs > 0 ? '+' : ''}${view3D.clockUs} µs (b = ${biasKm >= 0 ? '+' : ''}${fmt(biasKm, 0)} km)`;
+
+  // Fondo estelar e nebulosa sutil
+  c.save();
+  for (let i = 0; i < 64; i++) {
+    const sx = ((i * 197 + 17) % 100) / 100 * W;
+    const sy = ((i * 311 + 29) % 100) / 100 * H;
+    const rStar = (i % 3 === 0) ? 1.3 : 0.75;
+    c.fillStyle = `rgba(215, 234, 255, ${0.14 + (i % 5) * 0.08})`;
+    c.beginPath(); c.arc(sx, sy, rStar, 0, 2 * Math.PI); c.fill();
+  }
+  c.restore();
+
+  const centerP = project3D({ x: 0, y: 0, z: 0 }, W, H);
+  const earthR = R_EARTH * SCALE_3D * centerP.scale;
+  const activeCount = view3D.mode;
+
+  // Función auxiliar para debuxar tramos orbitais (detrás ou diante da Terra)
+  function drawOrbitPass(frontPass) {
+    for (let i = 0; i < activeCount; i++) {
+      const o = satOrbits[i];
+      c.save();
+      c.strokeStyle = sat3D[i].color;
+      c.globalAlpha = frontPass ? 0.42 : 0.16;
+      c.lineWidth = frontPass ? 1.45 : 1.0;
+      c.beginPath();
+      let pen = false;
+      const steps = 120;
+      for (let k = 0; k <= steps; k++) {
+        const u = (2 * Math.PI * k) / steps;
+        const pr = project3D(orbitPoint(o.inc, o.raan, u), W, H);
+        const isFront = pr.depth <= centerP.depth;
+        if (isFront === frontPass) {
+          if (!pen) { c.moveTo(pr.sx, pr.sy); pen = true; } else c.lineTo(pr.sx, pr.sy);
+        } else {
+          pen = false;
+        }
+      }
+      c.stroke();
+      c.restore();
+    }
+  }
+
+  // 1. Tramos orbitais que pasan por DETRÁS da Terra
+  drawOrbitPass(false);
+
+  // 2. Halo atmosférico exterior da Terra
+  c.save();
+  const haloGrad = c.createRadialGradient(centerP.sx, centerP.sy, earthR * 0.92, centerP.sx, centerP.sy, earthR * 1.28);
+  haloGrad.addColorStop(0, 'rgba(56, 165, 255, 0.35)');
+  haloGrad.addColorStop(0.45, 'rgba(32, 120, 230, 0.12)');
+  haloGrad.addColorStop(1, 'rgba(10, 40, 90, 0)');
+  c.fillStyle = haloGrad;
+  c.beginPath(); c.arc(centerP.sx, centerP.sy, earthR * 1.28, 0, 2 * Math.PI); c.fill();
+  c.restore();
+
+  // 3. Esfera oceánica + Continentes 3D + Iluminación esférica
+  c.save();
+  c.beginPath();
+  c.arc(centerP.sx, centerP.sy, earthR, 0, 2 * Math.PI);
+  c.clip();
+
+  // Océano profundo con iluminación direccional (sol arriba-esquerda)
+  const oceanGrad = c.createRadialGradient(
+    centerP.sx - earthR * 0.35, centerP.sy - earthR * 0.35, earthR * 0.06,
+    centerP.sx + earthR * 0.1, centerP.sy + earthR * 0.1, earthR * 1.05
+  );
+  oceanGrad.addColorStop(0, '#2574d9');
+  oceanGrad.addColorStop(0.42, '#134996');
+  oceanGrad.addColorStop(0.78, '#0a295c');
+  oceanGrad.addColorStop(1, '#04122b');
+  c.fillStyle = oceanGrad;
+  c.fillRect(centerP.sx - earthR, centerP.sy - earthR, earthR * 2, earthR * 2);
+
+  // Grella esférica fina (cada 15°)
+  for (let lat = -75; lat <= 75; lat += 15) {
+    const lr = lat * Math.PI / 180;
+    c.strokeStyle = lat === 0 ? 'rgba(130, 210, 255, 0.36)' : 'rgba(150, 205, 255, 0.13)';
+    c.lineWidth = lat === 0 ? 1.2 : 0.75;
+    c.beginPath();
+    let started = false;
+    for (let lon = 0; lon <= 360; lon += 6) {
+      const lo = lon * Math.PI / 180;
+      const pt = { x: R_EARTH * Math.cos(lr) * Math.cos(lo), y: R_EARTH * Math.cos(lr) * Math.sin(lo), z: R_EARTH * Math.sin(lr) };
+      const pr = project3D(pt, W, H);
+      if (pr.depth < centerP.depth + 0.015) {
+        if (!started) { c.moveTo(pr.sx, pr.sy); started = true; } else c.lineTo(pr.sx, pr.sy);
+      } else { started = false; }
+    }
+    c.stroke();
+  }
+  for (let lon = 0; lon < 180; lon += 15) {
+    const lo = lon * Math.PI / 180;
+    c.strokeStyle = lon === 0 ? 'rgba(130, 210, 255, 0.28)' : 'rgba(150, 205, 255, 0.12)';
+    c.lineWidth = lon === 0 ? 1.0 : 0.75;
+    c.beginPath();
+    let started = false;
+    for (let a = 0; a <= 360; a += 6) {
+      const ar = a * Math.PI / 180;
+      const pt = { x: R_EARTH * Math.cos(ar) * Math.cos(lo), y: R_EARTH * Math.cos(ar) * Math.sin(lo), z: R_EARTH * Math.sin(ar) };
+      const pr = project3D(pt, W, H);
+      if (pr.depth < centerP.depth + 0.015) {
+        if (!started) { c.moveTo(pr.sx, pr.sy); started = true; } else c.lineTo(pr.sx, pr.sy);
+      } else { started = false; }
+    }
+    c.stroke();
+  }
+
+  // Continentes 3D proxectados sobre o hemisferio visible
+  const landGrad = c.createLinearGradient(centerP.sx - earthR, centerP.sy - earthR, centerP.sx + earthR, centerP.sy + earthR);
+  landGrad.addColorStop(0, 'rgba(56, 178, 128, 0.78)');
+  landGrad.addColorStop(0.55, 'rgba(34, 134, 96, 0.72)');
+  landGrad.addColorStop(1, 'rgba(18, 82, 62, 0.65)');
+  c.fillStyle = landGrad;
+  c.strokeStyle = 'rgba(130, 240, 190, 0.55)';
+  c.lineWidth = 1.0;
+
+  CONTINENTS.forEach(poly => {
+    let visCount = 0;
+    const pts = [];
+    for (let i = 0; i < poly.length; i++) {
+      const [la1, lo1] = poly[i];
+      const [la2, lo2] = poly[(i + 1) % poly.length];
+      const segs = Math.max(1, Math.ceil(Math.hypot(la2 - la1, lo2 - lo1) / 4));
+      for (let s = 0; s < segs; s++) {
+        const t = s / segs;
+        const p3 = latLonToECEF(la1 + (la2 - la1) * t, lo1 + (lo2 - lo1) * t, R_EARTH);
+        const pr = project3D(p3, W, H);
+        if (pr.depth < centerP.depth + 0.01) {
+          visCount++;
+          pts.push({ sx: pr.sx, sy: pr.sy });
+        } else {
+          // Proxectar ao bordo do horizonte terrestre para evitar cortes rectos
+          const dx = pr.sx - centerP.sx, dy = pr.sy - centerP.sy;
+          const d = Math.hypot(dx, dy) || 1;
+          pts.push({ sx: centerP.sx + (dx / d) * earthR * 0.995, sy: centerP.sy + (dy / d) * earthR * 0.995 });
+        }
+      }
+    }
+    if (visCount > 2) {
+      c.beginPath();
+      pts.forEach((p, idx) => { if (idx === 0) c.moveTo(p.sx, p.sy); else c.lineTo(p.sx, p.sy); });
+      c.closePath();
+      c.fill();
+      c.stroke();
+    }
+  });
+
+  // Reflexo especular solar e sombreado esférico interior (Fresnel)
+  const specGrad = c.createRadialGradient(
+    centerP.sx - earthR * 0.38, centerP.sy - earthR * 0.38, 1,
+    centerP.sx - earthR * 0.38, centerP.sy - earthR * 0.38, earthR * 0.55
+  );
+  specGrad.addColorStop(0, 'rgba(210, 240, 255, 0.24)');
+  specGrad.addColorStop(1, 'rgba(210, 240, 255, 0)');
+  c.fillStyle = specGrad;
+  c.fillRect(centerP.sx - earthR, centerP.sy - earthR, earthR * 2, earthR * 2);
+
+  // Sombra nocturna no limbo inferior-dereito
+  const shadeGrad = c.createRadialGradient(
+    centerP.sx - earthR * 0.25, centerP.sy - earthR * 0.25, earthR * 0.45,
+    centerP.sx, centerP.sy, earthR
+  );
+  shadeGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  shadeGrad.addColorStop(0.75, 'rgba(2, 8, 22, 0.25)');
+  shadeGrad.addColorStop(1, 'rgba(2, 10, 28, 0.62)');
+  c.fillStyle = shadeGrad;
+  c.fillRect(centerP.sx - earthR, centerP.sy - earthR, earthR * 2, earthR * 2);
+  c.restore();
+
+  // Anel de atmosfera brillante no bordo do planeta
+  c.save();
+  c.strokeStyle = 'rgba(110, 195, 255, 0.65)';
+  c.lineWidth = 1.8;
+  c.beginPath(); c.arc(centerP.sx, centerP.sy, earthR, 0, 2 * Math.PI); c.stroke();
+  c.restore();
+
+  // Eixo polar N-S con tipografía nítida
+  const pNorth = project3D({ x: 0, y: 0, z: R_EARTH * 1.32 }, W, H);
+  c.save();
+  c.strokeStyle = 'rgba(190, 225, 255, 0.35)';
+  c.setLineDash([3, 3]);
+  c.beginPath(); c.moveTo(centerP.sx, centerP.sy - earthR * 0.85); c.lineTo(pNorth.sx, pNorth.sy); c.stroke();
+  c.setLineDash([]);
+  c.font = '600 11px "JetBrains Mono", monospace';
+  c.fillStyle = 'rgba(215, 235, 255, 0.8)';
+  c.textAlign = 'center';
+  c.fillText('Eixo N', pNorth.sx, pNorth.sy - 6);
+  c.restore();
+
+  // 4. Tramos orbitais que pasan por DIANTE da Terra
+  drawOrbitPass(true);
+
+  // Posición do Receptor en Galicia sobre a superficie terrestre
+  const recPr = project3D(recPos, W, H);
+
+  // Posición aparente desprazada polo erro do reloxo (cando δt != 0)
+  let ux = 0, uy = 0, uz = 0;
+  for (let i = 0; i < 3; i++) {
+    const d = sat3D[i].dist;
+    ux += (recPos.x - sat3D[i].x) / d;
+    uy += (recPos.y - sat3D[i].y) / d;
+    uz += (recPos.z - sat3D[i].z) / d;
+  }
+  const uNorm = Math.hypot(ux, uy, uz) || 1;
+  ux /= uNorm; uy /= uNorm; uz /= uNorm;
+  const gdopFactor = 1.65;
+  const estPos = {
+    x: recPos.x + ux * biasKm * gdopFactor * 8,
+    y: recPos.y + uy * biasKm * gdopFactor * 8,
+    z: recPos.z + uz * biasKm * gdopFactor * 8
+  };
+  const estPr = project3D(estPos, W, H);
+
+  // 5. Esferas de trilateración 3D, raios de sinal e satélites
+  for (let i = 0; i < activeCount; i++) {
+    const s = sat3D[i];
+    const sp = project3D(s, W, H);
+    const col = s.color;
+
+    if (view3D.showSpheres) {
+      const rSphere = Math.max(2000, s.dist + biasKm * 8);
+      c.save();
+      c.strokeStyle = col;
+      c.globalAlpha = 0.28;
+      c.lineWidth = 1.3;
+      const vx = (recPos.x - s.x) / s.dist, vy = (recPos.y - s.y) / s.dist, vz = (recPos.z - s.z) / s.dist;
+      const ax = -vy, ay = vx, az = 0;
+      const aLen = Math.hypot(ax, ay, az) || 1;
+      const e1x = ax / aLen, e1y = ay / aLen, e1z = az / aLen;
+      const e2x = vy * e1z - vz * e1y, e2y = vz * e1x - vx * e1z, e2z = vx * e1y - vy * e1x;
+
+      const coneAngle = 0.23;
+      c.beginPath();
+      for (let k = 0; k <= 48; k++) {
+        const th = (2 * Math.PI * k) / 48;
+        const px = s.x + rSphere * (Math.cos(coneAngle) * vx + Math.sin(coneAngle) * (Math.cos(th) * e1x + Math.sin(th) * e2x));
+        const py = s.y + rSphere * (Math.cos(coneAngle) * vy + Math.sin(coneAngle) * (Math.cos(th) * e1y + Math.sin(th) * e2y));
+        const pz = s.z + rSphere * (Math.cos(coneAngle) * vz + Math.sin(coneAngle) * (Math.cos(th) * e1z + Math.sin(th) * e2z));
+        const pr = project3D({ x: px, y: py, z: pz }, W, H);
+        if (k === 0) c.moveTo(pr.sx, pr.sy); else c.lineTo(pr.sx, pr.sy);
+      }
+      c.stroke();
+
+      for (let m = 0; m < 2; m++) {
+        c.beginPath();
+        for (let k = -20; k <= 20; k++) {
+          const ang = (k / 20) * coneAngle;
+          const dirX = m === 0 ? e1x : e2x, dirY = m === 0 ? e1y : e2y, dirZ = m === 0 ? e1z : e2z;
+          const px = s.x + rSphere * (Math.cos(ang) * vx + Math.sin(ang) * dirX);
+          const py = s.y + rSphere * (Math.cos(ang) * vy + Math.sin(ang) * dirY);
+          const pz = s.z + rSphere * (Math.cos(ang) * vz + Math.sin(ang) * dirZ);
+          const pr = project3D({ x: px, y: py, z: pz }, W, H);
+          if (k === -20) c.moveTo(pr.sx, pr.sy); else c.lineTo(pr.sx, pr.sy);
+        }
+        c.stroke();
+      }
+      c.restore();
+    }
+
+    // Liña de visión Satélite -> Receptor
+    c.save();
+    c.strokeStyle = col;
+    c.globalAlpha = 0.78;
+    c.lineWidth = 1.5;
+    c.setLineDash([4, 4]);
+    c.beginPath(); c.moveTo(sp.sx, sp.sy); c.lineTo(recPr.sx, recPr.sy); c.stroke();
+    c.setLineDash([]);
+    c.globalAlpha = 1;
+
+    // Pulso animado viaxando á velocidade da luz
+    const pulseT = (view3D.wavePhase + i * 0.25) % 1;
+    const px = sp.sx + (recPr.sx - sp.sx) * pulseT;
+    const py = sp.sy + (recPr.sy - sp.sy) * pulseT;
+    c.fillStyle = '#ffffff';
+    c.shadowColor = col;
+    c.shadowBlur = 8;
+    c.beginPath(); c.arc(px, py, 3.2, 0, 2 * Math.PI); c.fill();
+    c.shadowBlur = 0;
+    c.fillStyle = col;
+    c.beginPath(); c.arc(px, py, 2.2, 0, 2 * Math.PI); c.fill();
+    c.restore();
+
+    // Debuxar icona detallada do satélite 3D + Etiqueta Pill redondeada nítida
+    c.save();
+    c.translate(Math.round(sp.sx), Math.round(sp.sy));
+    // Paneis solares con celas fotovoltaicas
+    c.fillStyle = '#163256';
+    c.strokeStyle = col;
+    c.lineWidth = 1.3;
+    roundRectBadge(c, -18, -4.5, 11, 9, 2); c.fill(); c.stroke();
+    roundRectBadge(c, 7, -4.5, 11, 9, 2); c.fill(); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.22)'; c.lineWidth = 0.8;
+    c.beginPath(); c.moveTo(-12.5, -4.5); c.lineTo(-12.5, 4.5); c.moveTo(12.5, -4.5); c.lineTo(12.5, 4.5); c.stroke();
+
+    // Corpo central metálico
+    c.fillStyle = col;
+    c.beginPath(); c.arc(0, 0, 5.5, 0, 2 * Math.PI); c.fill();
+    c.strokeStyle = '#ffffff'; c.lineWidth = 1.6; c.stroke();
+
+    // Etiqueta PRN con pílula redondeada e texto nítido 1:1
+    c.font = '600 11.5px "JetBrains Mono", ui-monospace, monospace';
+    const lbl = `PRN ${s.prn}`;
+    const tw = Math.ceil(c.measureText(lbl).width) + 14;
+    const bx = 21, by = -11, bh = 22;
+    c.fillStyle = 'rgba(11, 19, 31, 0.88)';
+    roundRectBadge(c, bx, by, tw, bh, 6);
+    c.fill();
+    c.strokeStyle = col;
+    c.lineWidth = 1.1;
+    c.stroke();
+    c.fillStyle = '#f0f6fc';
+    c.textAlign = 'left';
+    c.textBaseline = 'middle';
+    c.fillText(lbl, bx + 7, 0.5);
+    c.restore();
+  }
+
+  // 6. Punto real do receptor en Galicia cunha etiqueta limpa e proporcionada
+  c.save();
+  const rx = Math.round(recPr.sx), ry = Math.round(recPr.sy);
+  // Halo pulsante no receptor
+  c.strokeStyle = 'rgba(16, 185, 129, 0.55)';
+  c.lineWidth = 1.5;
+  c.beginPath(); c.arc(rx, ry, 10, 0, 2 * Math.PI); c.stroke();
+  c.fillStyle = '#10b981';
+  c.strokeStyle = '#ffffff';
+  c.lineWidth = 2;
+  c.beginPath(); c.arc(rx, ry, 5.5, 0, 2 * Math.PI); c.fill(); c.stroke();
+
+  c.font = '600 11.5px "Archivo", -apple-system, sans-serif';
+  const recTxt = 'Receptor (x, y, z)';
+  const rtw = Math.ceil(c.measureText(recTxt).width) + 14;
+  c.fillStyle = 'rgba(8, 28, 24, 0.86)';
+  roundRectBadge(c, rx + 11, ry - 11, rtw, 22, 6);
+  c.fill();
+  c.strokeStyle = '#10b981';
+  c.lineWidth = 1;
+  c.stroke();
+  c.fillStyle = '#a7f3d0';
+  c.textAlign = 'left';
+  c.textBaseline = 'middle';
+  c.fillText(recTxt, rx + 18, ry + 0.5);
+
+  // Se hai erro de reloxo, mostrar a posición aparente desprazada
+  if (Math.abs(view3D.clockUs) > 5 && activeCount >= 3) {
+    const ex = Math.round(estPr.sx), ey = Math.round(estPr.sy);
+    c.strokeStyle = '#ff854d';
+    c.lineWidth = 1.6;
+    c.setLineDash([3, 3]);
+    c.beginPath(); c.moveTo(rx, ry); c.lineTo(ex, ey); c.stroke();
+    c.setLineDash([]);
+    c.fillStyle = '#ff854d';
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 1.5;
+    c.beginPath(); c.arc(ex, ey, 5, 0, 2 * Math.PI); c.fill(); c.stroke();
+
+    const errTxt = 'Pos. sen corrixir δt';
+    const etw = Math.ceil(c.measureText(errTxt).width) + 14;
+    c.fillStyle = 'rgba(36, 16, 10, 0.88)';
+    roundRectBadge(c, ex + 10, ey - 11, etw, 22, 6);
+    c.fill();
+    c.strokeStyle = '#ff854d';
+    c.lineWidth = 1;
+    c.stroke();
+    c.fillStyle = '#fed7aa';
+    c.fillText(errTxt, ex + 17, ey + 0.5);
+  }
+  c.restore();
+
+  // Actualizar zoom local 2D/3D de intersección e táboa
+  drawTrilatZoom(sat3D, biasKm);
+  update3DTable(sat3D, biasKm);
+}
+
+function drawTrilatZoom(sat3D, biasKm) {
+  const cv = $('#cvTrilatZoom');
+  if (!cv) return;
+  const { c, W, H } = prep(cv, 240);
+  const cx = W * 0.5, cy = H * 0.52;
+  const scalePx = Math.min(W, H) / 1300; // +-650 km de xanela local arredor do receptor
+
+  // Grella local centrada no receptor real (0, 0)
+  c.strokeStyle = T.grid; c.lineWidth = 1;
+  for (let d = -500; d <= 500; d += 250) {
+    const x = Math.round(cx + d * scalePx) + 0.5;
+    const y = Math.round(cy + d * scalePx) + 0.5;
+    c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke();
+    c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke();
+  }
+
+  // Direccións dos 4 satélites proxectadas no plano local do receptor
+  const dirs = [
+    { ang: -2.35, label: 'PRN ' + sat3D[0].prn, color: sat3D[0].color },
+    { ang: -0.65, label: 'PRN ' + sat3D[1].prn, color: sat3D[1].color },
+    { ang:  0.85, label: 'PRN ' + sat3D[2].prn, color: sat3D[2].color },
+    { ang:  2.25, label: 'PRN ' + sat3D[3].prn, color: sat3D[3].color }
+  ];
+
+  const activeCount = view3D.mode;
+  const R_BASE = 900; // raio de curvatura local para visualizar as fronteiras esféricas
+
+  // Debuxar cada fronteira esférica desprazada por biasKm
+  for (let i = 0; i < activeCount; i++) {
+    const d = dirs[i];
+    const satCx = cx + Math.cos(d.ang) * R_BASE * scalePx;
+    const satCy = cy + Math.sin(d.ang) * R_BASE * scalePx;
+    const r = Math.max(40, (R_BASE + biasKm) * scalePx);
+
+    c.save();
+    c.strokeStyle = d.color;
+    c.lineWidth = 2.2;
+    c.beginPath();
+    c.arc(satCx, satCy, r, d.ang + Math.PI - 0.55, d.ang + Math.PI + 0.55);
+    c.stroke();
+
+    // Frecha indicando dirección cara ao satélite i
+    const lx = cx + Math.cos(d.ang) * (W * 0.42);
+    const ly = cy + Math.sin(d.ang) * (H * 0.38);
+    c.font = MONO; c.fillStyle = d.color; c.textAlign = 'center';
+    c.fillText('↖ ' + d.label, lx, ly);
+    c.restore();
+  }
+
+  // Calcular intersección dos primeiros 3 satélites cando hai erro biasKm
+  // Mínimos cadrados para os 3 primeiros satélites:
+  const errX = biasKm * 0.72, errY = biasKm * 0.48;
+  const estX = cx + errX * scalePx, estY = cy + errY * scalePx;
+  const posErrKm = activeCount >= 3 ? Math.hypot(errX, errY) : Math.abs(biasKm);
+  const res4Km = Math.abs(biasKm) * 1.42;
+
+  // Se hai nesgo, debuxar círculo de incerteza / discrepancia co 4º satélite
+  if (Math.abs(biasKm) > 3 && activeCount === 4) {
+    c.save();
+    c.fillStyle = T.neg;
+    c.strokeStyle = T.warm;
+    c.setLineDash([4, 3]);
+    c.lineWidth = 1.5;
+    c.beginPath(); c.arc(cx, cy, Math.abs(biasKm) * scalePx, 0, 2 * Math.PI); c.fill(); c.stroke();
+    c.restore();
+  }
+
+  // Punto estimado con 3 satélites (falso se δt != 0)
+  if (activeCount >= 3 && Math.abs(biasKm) > 3) {
+    c.save();
+    c.strokeStyle = T.warm; c.lineWidth = 2;
+    c.fillStyle = T.surface;
+    c.beginPath(); c.arc(estX, estY, 5.5, 0, 2 * Math.PI); c.fill(); c.stroke();
+    c.font = DISP; c.fillStyle = T.warm; c.textAlign = 'left';
+    c.fillText('Solución falsa (3 sats)', estX + 9, estY + 3);
+    c.restore();
+  }
+
+  // Punto real do receptor no centro (0,0)
+  c.save();
+  c.fillStyle = '#10b981';
+  c.strokeStyle = T.surface;
+  c.lineWidth = 2;
+  c.beginPath(); c.arc(cx, cy, 6, 0, 2 * Math.PI); c.fill(); c.stroke();
+  c.font = DISP; c.fillStyle = T.ink; c.textAlign = 'left';
+  c.fillText(Math.abs(biasKm) <= 3 ? '✓ As 4 esferas cortan no receptor!' : 'Receptor real', cx + 10, cy - 8);
+  c.restore();
+
+  $('#roPosErr').textContent = fmt(posErrKm, 1) + ' km';
+  $('#roPosErr').style.color = posErrKm < 2 ? 'var(--s3)' : 'var(--warm)';
+  $('#roRes4').textContent = activeCount < 4 ? '— (falta 4.º sat)' : fmt(res4Km, 1) + ' km';
+}
+
+function update3DTable(sat3D, biasKm) {
+  const tb = $('#tb3DSats');
+  if (!tb) return;
+  tb.innerHTML = sat3D.slice(0, view3D.mode).map(s => {
+    const rho = s.dist + biasKm;
+    return `<tr>
+      <td><span class="dot" style="background:${s.color}"></span><b>PRN ${s.prn}</b></td>
+      <td style="font-family:var(--f-mono);font-size:0.76rem;color:var(--muted)">(${Math.round(s.x)}, ${Math.round(s.y)}, ${Math.round(s.z)})</td>
+      <td style="font-family:var(--f-mono)">${fmt(s.dist, 0)} km</td>
+      <td style="font-family:var(--f-mono);font-weight:700;color:${Math.abs(biasKm) > 3 ? 'var(--warm)' : 'var(--s3)'}">${fmt(rho, 0)} km</td>
+    </tr>`;
+  }).join('');
+}
+
+// Controis interactivos da Sección 5
+$('#seg3DMode').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  $('#seg3DMode').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  view3D.mode = +b.dataset.v;
+  draw3DScene();
+});
+$('#rgClockBias').addEventListener('input', e => {
+  view3D.clockUs = +e.target.value;
+  draw3DScene();
+});
+$('#btnSolveClock').addEventListener('click', () => {
+  // Animar a corrección do reloxo ata δt = 0
+  const start = view3D.clockUs;
+  const t0 = performance.now();
+  const step = now => {
+    const p = Math.min(1, (now - t0) / 550);
+    const ease = 1 - Math.pow(1 - p, 3);
+    view3D.clockUs = Math.round(start * (1 - ease));
+    $('#rgClockBias').value = view3D.clockUs;
+    draw3DScene();
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+});
+$('#chkSpheres').addEventListener('change', e => { view3D.showSpheres = e.target.checked; draw3DScene(); });
+$('#chkAutoRot').addEventListener('change', e => { view3D.autoRot = e.target.checked; });
+$('#btnResetCam').addEventListener('click', () => { view3D.yaw = -0.65; view3D.pitch = 0.42; view3D.zoom = 1.08; draw3DScene(); });
+
+// Rotación co rato / pantalla táctil no lenzo 3D
+const cv3D = $('#cv3D');
+cv3D.addEventListener('pointerdown', e => {
+  view3D.dragging = true;
+  view3D.lx = e.clientX;
+  view3D.ly = e.clientY;
+  cv3D.setPointerCapture(e.pointerId);
+  cv3D.style.cursor = 'grabbing';
+});
+cv3D.addEventListener('pointermove', e => {
+  if (!view3D.dragging) return;
+  const dx = e.clientX - view3D.lx, dy = e.clientY - view3D.ly;
+  view3D.lx = e.clientX; view3D.ly = e.clientY;
+  view3D.yaw += dx * 0.008;
+  view3D.pitch = Math.max(-1.35, Math.min(1.35, view3D.pitch + dy * 0.008));
+  draw3DScene();
+});
+['pointerup', 'pointercancel'].forEach(ev => cv3D.addEventListener(ev, () => {
+  view3D.dragging = false;
+  cv3D.style.cursor = 'grab';
+}));
+cv3D.addEventListener('wheel', e => {
+  e.preventDefault();
+  view3D.zoom = Math.max(0.65, Math.min(2.1, view3D.zoom * (e.deltaY < 0 ? 1.07 : 0.93)));
+  draw3DScene();
+}, { passive: false });
+
+// Bucle de animación suave para os pulsos e órbitas 3D
+function tick3D() {
+  if (view3D.autoRot && !view3D.dragging) {
+    view3D.yaw += 0.0022;
+    view3D.orbPhase += 0.008;
+  }
+  view3D.wavePhase = (view3D.wavePhase + 0.012) % 1;
+  draw3DScene();
+  requestAnimationFrame(tick3D);
+}
+
+/* ---------- Inicio e Redebuxado ---------- */
+function drawAll() { readTheme(); drawOrt(); drawSin(); drawGold(); drawStack1(); drawRx(); drawCorr(); drawAcq(); draw3DScene(); }
+readTheme();
+fillPrn($('#selSearch'), 5);
+buildRows();
+computeGold();
+$('#vNoise').textContent = fmt(+$('#rgNoise').value, 1);
+updDist(); buildRx(); computeR(); computeAcq();
+drawAll();
+requestAnimationFrame(tick3D);
+
+let rt = null; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(drawAll, 80); });
+try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => setTimeout(drawAll, 30)); } catch (e) {}
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawAll);
+})();
+</script>
+</body>
+</html>
